@@ -1,0 +1,1184 @@
+---
+title: ""
+author: 
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+date: ""
+---
+
+```{r}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  results = "markup", 
+  warning = FALSE,  
+  message = FALSE   
+)
+
+```
+
+```{r}
+#Libraries
+library(pacman)
+p_load(lavaan, rio, tidyverse, psych, here, stargazer, summarytools, visdat,
+       EGAnet, qgraph, ggplot2, haven, janitor, readxl, labelled, reshape2,
+       openxlsx, mgm, bootnet, conflicted, magick, patchwork)
+
+#Options
+rm(list = ls())
+options(scipen = 999)
+#conflicts
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+```
+
+# Input
+
+```{r}
+# Import cleaned data
+data = readRDS(here("Input", "Secondary", "data.rds"))
+```
+
+```{r}
+# Means by country
+means_by_country <- data %>%
+  group_by(country) %>%
+  summarise(
+    mean_CB = mean(CB, na.rm = TRUE),
+    mean_GCB = mean(GCB, na.rm = TRUE)
+  )
+
+```
+
+
+## Smaller country dataset for networks
+
+```{r}
+# List with country dataset 
+
+#H1: cbs+GCB
+H1 = data %>% 
+ select(cb_1:cb_8, GCB, country) %>% 
+ na.omit()
+H1_split_data <- split(H1[, setdiff(names(H1), "country")], H1$country)
+
+#H2: gcbs+CB
+H2 = data %>% 
+ select(gcb_1:gcb_5, CB, country) %>% 
+ na.omit()
+H2_split_data <- split(H2[, setdiff(names(H2), "country")], H2$country)
+
+```
+
+```{r}
+#Country_data obj as matrix
+H1_split_data <- lapply(H1_split_data, function(sublist) as.matrix(sublist))
+H2_split_data <- lapply(H2_split_data, function(sublist) as.matrix(sublist))
+```
+
+```{r}
+# objects for network 
+shortnames = c("rad_food","aids","elf","chemtrails",
+              "worldgov","rothschild","monsanto","ebola", "CM")
+
+# Country color palette 
+country_colors <- c(
+  "DEU" = "#E41A1C", "ESP" = "#377EB8", "FRA" = "#4DAF4A", 
+  "GBR" = "#984EA3", "ITA" = "#FF7F00", "POL" = "#ffcf33",
+  "SWE" = "#A65628", "USA" = "#008080")
+
+Totalgroup_comm <- list(
+  "Conspiracy Beliefs" = c(1:8),
+  "Conspiracy Mentality" = c(9))
+
+Totalgroup_cols <- c("#966FD6", "#006B3C") 
+
+#type
+type = c("g","g","g","g","g","g","g","g","g")
+
+#level
+level = c(1,1,1,1,1,1,1,1,1)
+
+```
+
+
+# Processing
+
+## H1: GCB is the most central node
+
+### Estimation and network plotting
+
+```{r}
+#Network estimation and plotting
+
+# Compute the average layout across all networks in H0_split_data
+graph_matrices <- lapply(H1_split_data, as.matrix)
+
+# Fit MGM models and extract adjacency matrices for layout computation
+mgm_models <- lapply(graph_matrices, function(mat) {
+  mgm(mat, type = type, level = level, lambdaSel = "CV", ruleReg = "OR")
+})
+
+# Extract adjacency matrices
+adjacency_matrices <- lapply(mgm_models, function(model) model$pairwise$wadj)
+
+# Compute the average layout using spring layout
+shared_layout <- averageLayout(adjacency_matrices, layout = "spring")
+
+# Loop through each country in H0_split_data
+for (country_name in names(H1_split_data)) {
+  
+  # Access country data
+  country_matrix <- H1_split_data[[country_name]]
+  
+  # Network estimation
+  mgm_result <- mgm(
+    country_matrix, type = type, level = level,
+    lambdaSel = "CV", ruleReg = "OR", verbose = FALSE, pbar = FALSE
+  )
+  
+  # Predictability
+  pred_result <- predict(object = mgm_result, data = country_matrix, errorCon = 'R2')
+  
+  # Define output path
+  output_path <- here("Output", "Country_networks", "H1", paste0(country_name, ".jpg"))
+
+  # Open a JPG device 
+  jpeg(output_path, width = 4.15, height = 5.85, units = "in", res = 600)
+
+  # Generate the qgraph plot 
+  qgraph(
+    mgm_result$pairwise$wadj, layout = shared_layout, labels = shortnames,
+    groups = Totalgroup_comm,  
+    color = Totalgroup_cols, legend = FALSE,
+    title = country_name, edge.color = mgm_result$pairwise$edgecolor_cb,
+    vTrans = 180, borders = TRUE, vsize = 10, esize = 7, label.cex = 0.50,
+    label.scale = FALSE, 
+    pie = pred_result$errors[,2], 
+    pieColor = rep('#FFFF00', length(shortnames))
+  )
+
+  dev.off()
+}
+
+```
+
+```{r}
+# Define input directory
+input_directory <- here("Output", "Country_networks", "H1")
+
+# Define output file paths
+output_file_1 <- here("Output", "Supplement", "H1_Net_comp_1.jpg")
+output_file_2 <- here("Output", "Supplement", "H1_Net_comp_2.jpg")
+
+# Read and preserve full resolution of images
+network_images <- lapply(
+  list.files(input_directory, pattern = "\\.jpg$", full.names = TRUE),
+  function(file) image_read(file)
+)
+
+# Ensure there are at least 8 images 
+if (length(network_images) >= 8) {
+  
+  # Split images into two groups of 4
+  network_images_1 <- network_images[1:4]  
+  network_images_2 <- network_images[5:8]  
+  
+  # Create first composite image (2x4 layout)
+  composite_image_1 <- image_montage(
+    image_join(network_images_1),
+    tile = "2x4",
+    geometry = "+20+20"
+  )
+
+  # Create second composite image (2x4 layout)
+  composite_image_2 <- image_montage(
+    image_join(network_images_2),
+    tile = "2x4",
+    geometry = "+20+20"
+  )
+
+  # Save the first 
+  image_write(composite_image_1, path = output_file_1, format = "jpg", quality = 100)
+
+  # Save the second 
+  image_write(composite_image_2, path = output_file_2, format = "jpg", quality = 100)
+
+}
+
+```
+
+```{r}
+# Print USA network with different layout to assemble Figure 1
+  
+  # Network estimation
+  mgm_result <- mgm(H1_split_data$USA, type = type, level = level,
+                    lambdaSel = "CV", ruleReg = "OR", verbose = FALSE, pbar = F)
+  
+  # Predictability
+  pred_result <- predict(object = mgm_result, data = country_matrix, errorCon = 'R2')
+  
+  # Define save path
+  output_path <- here("Output", "Country_networks", "H1", "USA_Fig1.jpg")
+
+  # Open a JPG device 
+  jpeg(here("Output", "Country_networks", "H1", "USA_Fig1.jpg"),
+        width = 8.3, height = 3.9, units = "in", res = 600)
+
+  # Generate the qgraph plot
+  qgraph(
+  mgm_result$pairwise$wadj, layout = 'spring', labels = shortnames,
+  groups = Totalgroup_comm,  
+  color = Totalgroup_cols, legend = FALSE,
+  title = "H1: CM index and CB items", edge.color = mgm_result$pairwise$edgecolor_cb,
+  vTrans = 180, borders = TRUE, vsize = 9.5, esize = 7, label.cex = 0.60,
+  label.scale = F, 
+  pie = pred_result$errors[,2], 
+  pieColor = rep('#FFFF00', length(shortnames))
+  )
+
+  dev.off()
+
+```
+
+### Bootstrapped network estimation
+
+```{r}
+# mgm boots by country
+
+# # Empty list 
+# boot_results <- list()
+# 
+# # Loop for country 
+# for (country_name in names(H1_split_data)) {
+#  
+#  # Access country data 
+#  country_matrix <- H1_split_data[[country_name]]
+#  
+#  # Bootstrapp
+#  boot_result <- bootnet(
+#    country_matrix,
+#    nBoots = 1000,
+#    nCores = 8,
+#    default = "mgm",
+#    statistics = "strength"
+#  )
+#  
+#  # Save results 
+#  boot_results[[country_name]] <- boot_result
+# }
+# 
+# 
+# # Save locally
+# saveRDS(boot_results, here("Input", "Secondary", "boot_H1.rds"))
+
+# Load to save time
+boot_results = readRDS(here("Input", "Secondary", "boot_H1.rds")) 
+```
+
+### H1 plot: comparison of bootstrapped centrality scores
+
+```{r}
+# Data managment of bootstrap object
+
+# Nodes
+node_names <- c("rad_food","aids","elf","chemtrails",
+              "worldgov","rothschild","monsanto","ebola", "CM")
+
+# Empty list
+boot_dataframes <- list()
+
+# Loop for country
+for (country_name in names(boot_results)) {
+  
+  # Extract the vector of 9000 values 
+  values <- boot_results[[country_name]][["bootTable"]][["value"]]
+  
+  # Check if the length of values is divisible by 9
+  if (length(values) %% length(node_names) != 0) {
+    stop(paste("Length of values for", country_name, "is not a multiple of", length(node_names)))
+  }
+  
+  # Reshape the values into a matrix with 9 columns
+  values_matrix <- matrix(values, ncol = length(node_names), byrow = TRUE)
+  
+  # Convert the matrix into a data frame 
+  values_dataframe <- as.data.frame(values_matrix)
+  colnames(values_dataframe) <- node_names
+  
+  # Add the country-specific data frame to the list
+  boot_dataframes[[country_name]] <- values_dataframe
+}
+```
+
+```{r}
+# Plot for H1
+
+# Gather centrality score in long format
+long_boot_data <- do.call(rbind, lapply(names(boot_dataframes), function(country_name) {
+  df <- boot_dataframes[[country_name]]
+  df$country <- country_name # Add a column for the country
+  return(df)
+})) %>%
+  melt(id.vars = "country", variable.name = "Node", value.name = "Centrality")  
+
+# Calculate 95% bootstrapped CIs
+ci_data <- long_boot_data %>%
+  group_by(country, Node) %>%
+  summarise(
+    lower = quantile(Centrality, probs = 0.025),
+    upper = quantile(Centrality, probs = 0.975),
+    .groups = "drop"
+  )
+
+# Colors 
+violin_colors <- ifelse(unique(long_boot_data$Node) == "CM", "#006B3C", "#966FD6")
+
+# Plot
+H1_plot = ggplot(long_boot_data, aes(x = Node, y = Centrality, fill = Node)) +
+  geom_violin(alpha = 0.8) +
+  geom_errorbar(data = ci_data, aes(x = Node, ymin = lower, ymax = upper), 
+                width = 0.2, color = "black", inherit.aes = FALSE) +
+  scale_fill_manual(values = setNames(violin_colors, unique(long_boot_data$Node))) +
+  facet_wrap(~ country, scales = "free_y", ncol = 2, nrow = 4) +  
+  labs(
+    title = "",
+    x = "Node",
+    y = "Centrality"
+  ) +
+  theme(
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.title.x = element_text(size = 14, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none")
+
+# Save
+ggsave(here("Output", "H1.jpg"), width = 8.3, height = 11.7, units = "in", dpi = 300)
+
+```
+
+
+## H2: CB index is a latent variable for mentality
+
+```{r}
+# Objects for H2
+shortnames_H2 = c("government", "aliens", "technology", "elite", "drugs", "CB")
+
+Totalgroup_comm_H2 <- list(
+  "Conspiracy Mentality" = c(1:5),
+  "Conspiracy Beliefs" = c(6))
+
+Totalgroup_cols_H2 <- c("#006B3C", "#966FD6") 
+
+#type
+type_H2 = c("g","g","g","g","g","g")
+
+#level
+level_H2 = c(1,1,1,1,1,1)
+```
+
+### Estimation and network plotting
+
+```{r}
+#Network estimation and plotting
+
+# Compute the average layout across all networks in H0_split_data
+graph_matrices <- lapply(H2_split_data, as.matrix)
+
+# Fit MGM models and extract adjacency matrices for layout computation
+mgm_models <- lapply(graph_matrices, function(mat) {
+  mgm(mat, type = type_H2, level = level_H2, lambdaSel = "CV", ruleReg = "OR")
+})
+
+# Extract adjacency matrices
+adjacency_matrices <- lapply(mgm_models, function(model) model$pairwise$wadj)
+
+# Compute the average layout using spring layout
+shared_layout <- averageLayout(adjacency_matrices, layout = "spring")
+
+# Loop through each country in H0_split_data
+for (country_name in names(H2_split_data)) {
+  
+  # Access country data
+  country_matrix <- H2_split_data[[country_name]]
+  
+  # Network estimation
+  mgm_result <- mgm(
+    country_matrix, type = type_H2, level = level_H2,
+    lambdaSel = "CV", ruleReg = "OR", verbose = FALSE, pbar = FALSE
+  )
+  
+  # Predictability
+  pred_result <- predict(object = mgm_result, data = country_matrix, errorCon = 'R2')
+  
+  # Define output path
+  output_path <- here("Output", "Country_networks", "H2", paste0(country_name, ".jpg"))
+
+  # Open a JPG device 
+  jpeg(output_path, width = 4.15, height = 5.85, units = "in", res = 600)
+
+  # Generate the qgraph plot 
+  qgraph(
+    mgm_result$pairwise$wadj, layout = shared_layout, labels = shortnames_H2,
+    groups = Totalgroup_comm_H2,  
+    color = Totalgroup_cols_H2, legend = FALSE,
+    title = country_name, edge.color = mgm_result$pairwise$edgecolor_cb,
+    vTrans = 180, borders = TRUE, vsize = 10, esize = 7, label.cex = 0.50,
+    label.scale = FALSE, 
+    pie = pred_result$errors[,2], 
+    pieColor = rep('#FFFF00', length(shortnames_H2))
+  )
+
+  dev.off()
+}
+
+```
+
+```{r}
+# Define input directory
+input_directory <- here("Output", "Country_networks", "H2")
+
+# Define output file paths
+output_file_1 <- here("Output", "Supplement", "H2_Net_comp_1.jpg")
+output_file_2 <- here("Output", "Supplement", "H2_Net_comp_2.jpg")
+
+# Read and preserve full resolution of images
+network_images <- lapply(
+  list.files(input_directory, pattern = "\\.jpg$", full.names = TRUE),
+  function(file) image_read(file)
+)
+
+# Ensure there are at least 8 images 
+if (length(network_images) >= 8) {
+  
+  # Split images into two groups of 4
+  network_images_1 <- network_images[1:4]  
+  network_images_2 <- network_images[5:8]  
+  
+  # Create first composite image (2x4 layout)
+  composite_image_1 <- image_montage(
+    image_join(network_images_1),
+    tile = "2x4",
+    geometry = "+20+20"
+  )
+
+  # Create second composite image (2x4 layout)
+  composite_image_2 <- image_montage(
+    image_join(network_images_2),
+    tile = "2x4",
+    geometry = "+20+20"
+  )
+
+  # Save the first 
+  image_write(composite_image_1, path = output_file_1, format = "jpg", quality = 100)
+
+  # Save the second 
+  image_write(composite_image_2, path = output_file_2, format = "jpg", quality = 100)
+
+}
+
+```
+
+```{r}
+# Print USA network with different layout to assemble Figure 1
+  
+  # Network estimation
+  mgm_result <- mgm(H2_split_data$USA, type = type_H2, level = level_H2,
+                    lambdaSel = "CV", ruleReg = "OR", verbose = FALSE, pbar = F)
+  
+  # Predictability
+  pred_result <- predict(object = mgm_result, data = country_matrix, errorCon = 'R2')
+  
+  # Define save path
+  output_path <- here("Output", "Country_networks", "H2", "USA_Fig1.jpg")
+
+  # Open a JPG device 
+  jpeg(here("Output", "Country_networks", "H2", "USA_Fig1.jpg"),
+        width = 8.3, height = 3.9, units = "in", res = 600)
+
+  # Generate the qgraph plot
+  qgraph(
+  mgm_result$pairwise$wadj, layout = 'spring', labels = shortnames_H2,
+  groups = Totalgroup_comm_H2,  
+  color = Totalgroup_cols_H2, legend = FALSE,
+  title = "H2: CB index and CM items", edge.color = mgm_result$pairwise$edgecolor_cb,
+  vTrans = 180, borders = TRUE, vsize = 9.5, esize = 7, label.cex = 0.60,
+  label.scale = F, 
+  pie = pred_result$errors[,2], 
+  pieColor = rep('#FFFF00', length(shortnames_H2))
+  )
+
+  dev.off()
+
+```
+
+### Bootstrapped network estimation
+
+```{r}
+# mgm boots by country
+ 
+# # Empty list for bootstrapped results
+# boot_result_H2 <- list()
+# 
+# # Loop for each country
+# for (country_name in names(H2_split_data)) {
+#   
+#   # Access country data
+#   country_matrix <- H2_split_data[[country_name]]
+#   
+#   # Bootstrapping
+#   boot_result <- bootnet(
+#     country_matrix,
+#     nBoots = 1000,
+#     nCores = 8,
+#     default = "mgm",
+#     statistics = "strength"
+#   )
+#   
+#   # Save results in the list
+#   boot_result_H2[[country_name]] <- boot_result
+# }
+# 
+# # Save locally
+# saveRDS(boot_result_H2, here("Input", "Secondary", "boot_H2.rds"))
+
+# To save time, load bootstrapped results
+boot_result_H2 <- readRDS(here("Input", "Secondary", "boot_H2.rds"))
+```
+
+### H2 plot
+
+```{r}
+# Data managment of bootstrap object
+
+# Nodes
+node_names <- c("government", "aliens", "technology", "elite", "drugs", "CB")
+
+# Empty list
+boot_dataframes <- list()
+
+# Loop for each country
+for (country_name in names(boot_result_H2)) {
+  
+  # Extract the vector of bootstrap values
+  values <- boot_result_H2[[country_name]][["bootTable"]][["value"]]
+  
+  # Check if the length of values is divisible by the number of nodes
+  if (length(values) %% length(node_names) != 0) {
+    stop(paste("Length of values for", country_name, "is not a multiple of", length(node_names)))
+  }
+  
+  # Reshape the values into a matrix with 6 columns (one for each node)
+  values_matrix <- matrix(values, ncol = length(node_names), byrow = TRUE)
+  
+  # Convert the matrix into a data frame
+  values_dataframe <- as.data.frame(values_matrix)
+  colnames(values_dataframe) <- node_names
+  
+  # Add the country-specific data frame to the list
+  boot_dataframes[[country_name]] <- values_dataframe
+}
+```
+
+```{r}
+# Plot for H2
+
+# Gather centrality scores in long format
+long_boot_data <- do.call(rbind, lapply(names(boot_dataframes), function(country_name) {
+  df <- boot_dataframes[[country_name]]
+  df$country <- country_name 
+  return(df)
+})) %>%
+  melt(id.vars = "country", variable.name = "Node", value.name = "Centrality")
+
+# Calculate 95% bootstrapped CIs
+ci_data <- long_boot_data %>%
+  group_by(country, Node) %>%
+  summarise(
+    lower = quantile(Centrality, probs = 0.025),
+    upper = quantile(Centrality, probs = 0.975),
+    .groups = "drop"
+  )
+
+# Colors
+violin_colors <- ifelse(unique(long_boot_data$Node) == "CB", "#966FD6","#006B3C")
+
+# Plot
+H2 <- ggplot(long_boot_data, aes(x = Node, y = Centrality, fill = Node)) +
+  geom_violin(alpha = 0.8) +
+  geom_errorbar(data = ci_data, aes(x = Node, ymin = lower, ymax = upper), 
+                width = 0.2, color = "black", inherit.aes = FALSE) +
+  scale_fill_manual(values = setNames(violin_colors, unique(long_boot_data$Node))) +
+  facet_wrap(~ country, scales = "free_y", ncol = 2, nrow = 4) +  
+  labs(
+    title = "",
+    x = "Node",
+    y = "Centrality"
+  ) +
+  theme(
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.title.x = element_text(size = 14, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none")
+
+# Save
+ggsave(here("Output", "H2.jpg"), H2, width = 8.3, height = 11.7, units = "in", dpi = 300)
+
+```
+
+## Figure_1
+
+```{r}
+# Define the input file paths
+file_H0 <- here("Output", "Country_networks", "H0", "USA_Fig1.jpg")
+file_H1 <- here("Output", "Country_networks", "H1", "USA_Fig1.jpg")
+file_H2 <- here("Output", "Country_networks", "H2", "USA_Fig1.jpg")
+
+# Define output file path
+output_file_long <- here("Output", "Figure_1_Long.jpg")
+
+# Read images
+network_images <- lapply(
+  c(file_H0, file_H1, file_H2),
+  function(file) image_read(file)
+)
+
+# Create a long image 
+composite_image_long <- image_append(image_join(network_images), stack = TRUE)
+
+# Save with max quality
+image_write(
+  composite_image_long, 
+  path = output_file_long, 
+  format = "jpg", 
+  quality = 600
+)
+```
+
+## Figure 4
+
+```{r}
+## List with country dataset 
+
+# For H1
+#CB
+CB = data %>% 
+ select(cb_1:cb_8, country) %>% 
+ na.omit()
+CB_split_data <- split(CB[, setdiff(names(CB), "country")], CB$country)
+
+#H1: cbs+GCB
+H1 = data %>% 
+ select(cb_1:cb_8, GCB, country) %>% 
+ na.omit()
+H1_split_data <- split(H1[, setdiff(names(H1), "country")], H1$country)
+
+
+# For H2
+#GCB
+GCB = data %>% 
+ select(gcb_1:gcb_5, country) %>% 
+ na.omit()
+GCB_split_data <- split(GCB[, setdiff(names(GCB), "country")], GCB$country)
+
+#H2: gcbs+CB
+H2 = data %>% 
+ select(gcb_1:gcb_5, CB, country) %>% 
+ na.omit()
+H2_split_data <- split(H2[, setdiff(names(H2), "country")], H2$country)
+```
+
+```{r}
+# ## Bootstrap data
+# 
+# # Number of bootstrap samples
+# n_boot <- 1000
+# 
+# # Function to bootstrap a matrix
+# bootstrap_matrix <- function(mat, n_boot) {
+#   lapply(1:n_boot, function(i) {
+#     sample_indices <- sample(1:nrow(mat), replace = TRUE)  # Sample rows with #replacement
+#     as.matrix(mat[sample_indices, , drop = FALSE])  # Convert to matrix
+#   })
+# }
+# 
+# # Initialize lists to store bootstrap results
+# boot_CB <- list()
+# boot_H1 <- list()
+# boot_GCB <- list()
+# boot_H2 <- list()
+# 
+# # Bootstrapping CB_split_data
+# for (country in names(CB_split_data)) {
+#   cat("Bootstrapping CB:", country, "\n")
+#   boot_CB[[country]] <- bootstrap_matrix(CB_split_data[[country]], n_boot)
+# }
+# 
+# # Bootstrapping H1_split_data
+# for (country in names(H1_split_data)) {
+#   cat("Bootstrapping H1:", country, "\n")
+#   boot_H1[[country]] <- bootstrap_matrix(H1_split_data[[country]], n_boot)
+# }
+# 
+# # Bootstrapping GCB_split_data
+# for (country in names(GCB_split_data)) {
+#   cat("Bootstrapping GCB:", country, "\n")
+#   boot_GCB[[country]] <- bootstrap_matrix(GCB_split_data[[country]], n_boot)
+# }
+# 
+# # Bootstrapping H2_split_data
+# for (country in names(H2_split_data)) {
+#   cat("Bootstrapping H2:", country, "\n")
+#   boot_H2[[country]] <- bootstrap_matrix(H2_split_data[[country]], n_boot)
+# }
+
+```
+
+
+```{r}
+
+# ## Bootstrap R2 values
+#
+# # Set bootstrap iterations
+# n_boot <- 1000 
+# 
+# # Function to apply mgm and extract node-wise R2
+# apply_mgm_bootstrap <- function(boot_matrices) {
+#   
+#   # Get number of nodes (columns)
+#   n_nodes <- ncol(boot_matrices[[1]])  
+# 
+#   # Initialize matrix to store R2 values 
+#   r2_matrix <- matrix(NA, nrow = n_boot, ncol = n_nodes)
+# 
+#   for (i in seq_len(n_boot)) {
+#     cat("Processing iteration:", i, "of", n_boot, "\n")
+#     
+#     # Convert to matrix
+#     data_mat <- as.matrix(boot_matrices[[i]])
+# 
+#     # Fit mgm model
+#     mgm_model <- mgm(
+#       data = data_mat, 
+#       type = rep("g", n_nodes),  # Gaussian variables
+#       level = rep(1, n_nodes), 
+#       lambdaSel = "CV", 
+#       ruleReg = "OR",
+#       verbose = F
+#     )
+# 
+#     # R2 values
+#     pred <- predict(object = mgm_model, data = data_mat, errorCon = 'R2')
+# 
+#     # Extract only the R2 values from the errors data frame
+#     r2_values <- pred$errors$R2  
+# 
+#     # Store in matrix
+#     r2_matrix[i, ] <- r2_values
+#   }
+# 
+#   return(r2_matrix)  
+# }
+# 
+# # Initialize lists to store r2 results
+# r2_CB <- list()
+# r2_H1 <- list()
+# r2_GCB <- list()
+# r2_H2 <- list()
+# 
+# # Apply mgm to each bootstrapped dataset
+# 
+# for (country in names(boot_CB)) {
+#   cat("\nProcessing CB:", country, "\n")
+#   r2_CB[[country]] <- apply_mgm_bootstrap(boot_CB[[country]])
+# }
+# 
+# for (country in names(boot_H1)) {
+#   cat("\nProcessing H1:", country, "\n")
+#   r2_H1[[country]] <- apply_mgm_bootstrap(boot_H1[[country]])
+# }
+# 
+# for (country in names(boot_GCB)) {
+#   cat("\nProcessing GCB:", country, "\n")
+#   r2_GCB[[country]] <- apply_mgm_bootstrap(boot_GCB[[country]])
+# }
+# 
+# for (country in names(boot_H2)) {
+#   cat("\nProcessing H2:", country, "\n")
+#   r2_H2[[country]] <- apply_mgm_bootstrap(boot_H2[[country]])
+# }
+# 
+# # Save results locally
+# saveRDS(r2_CB, here("Input", "Secondary", "r2_CB.rds"))
+# saveRDS(r2_H1, here("Input", "Secondary", "r2_H1.rds"))
+# saveRDS(r2_GCB, here("Input", "Secondary", "r2_GCB.rds"))
+# saveRDS(r2_H2, here("Input", "Secondary", "r2_H2.rds"))
+
+```
+
+```{r}
+# Load bootstrapped R2 to save time
+r2_CB <- readRDS(here("Input", "Secondary", "r2_CB.rds"))
+r2_H1 <- readRDS(here("Input", "Secondary", "r2_H1.rds")) 
+r2_GCB <- readRDS(here("Input", "Secondary", "r2_GCB.rds")) 
+r2_H2 <- readRDS(here("Input", "Secondary", "r2_H2.rds")) 
+
+# Create/re-use shortnames objs
+shortnames_r2_CB <- c("rad_food","aids","elf","chemtrails",
+              "worldgov","rothschild","monsanto","ebola")
+
+shortnames_r2_H1 <- shortnames
+
+shortnames_r2_GCB <- c("government", "aliens", "technology", "elite", "drugs")
+
+shortnames_r2_H2 <- shortnames_H2
+```
+
+### First comparison
+
+```{r}
+# Function to remove column 9 from all country lists
+remove_ninth_column <- function(r2_list) {
+  modified_list <- list()
+  
+  for (country in names(r2_list)) {
+    df <- as.data.frame(r2_list[[country]])  
+    
+    if (ncol(df) >= 9) {  
+      df <- df[, -9]  
+    }
+    
+    modified_list[[country]] <- df  
+  }
+  
+  return(modified_list)
+}
+
+# Apply function to remove column 9 from r2_H1
+r2_H1 <- remove_ninth_column(r2_H1)
+
+# Function to rename columns using shortnames_r2_CB
+rename_columns <- function(r2_list, shortnames) {
+  modified_list <- list()
+  
+  for (country in names(r2_list)) {
+    df <- as.data.frame(r2_list[[country]])  
+    
+    if (ncol(df) == length(shortnames)) {  # ensure matching column count
+      colnames(df) <- shortnames  # assign new column names
+    } else {
+      warning(paste("Mismatch in column count for", country, "- Skipping renaming"))
+    }
+    
+    modified_list[[country]] <- df  
+  }
+  
+  return(modified_list)
+}
+
+# Apply renaming to r2_H1 and r2_CB
+r2_H1 <- rename_columns(r2_H1, shortnames_r2_CB)
+r2_CB <- rename_columns(r2_CB, shortnames_r2_CB)
+
+```
+
+```{r}
+# Function to compute the mean r2 from bootstrapped results
+compute_mean_r2 <- function(r2_list) {
+  mean_r2_list <- list()
+
+  for (country in names(r2_list)) {
+    df <- as.data.frame(r2_list[[country]])  
+    
+    # Compute the mean r2 per node
+    mean_df <- df %>%
+      summarise(across(everything(), mean, na.rm = TRUE)) %>%
+      pivot_longer(cols = everything(), names_to = "Node", values_to = "R2") %>%
+      mutate(country = country)
+    
+    mean_r2_list[[country]] <- mean_df
+  }
+
+  return(bind_rows(mean_r2_list))  # Combine all countries into one dataframe
+}
+
+# Compute mean r2 values for CB and H1 with correct labels
+mean_r2_CB <- compute_mean_r2(r2_CB)
+mean_r2_H1 <- compute_mean_r2(r2_H1)
+
+```
+
+```{r}
+# Function to filter out nodes that are not in both lists
+filter_common_nodes <- function(mean_r2_1, mean_r2_2) {
+  common_nodes <- intersect(mean_r2_1$Node, mean_r2_2$Node)  # Identify common nodes
+  filtered_r2_1 <- mean_r2_1 %>% filter(Node %in% common_nodes)
+  filtered_r2_2 <- mean_r2_2 %>% filter(Node %in% common_nodes)
+
+  return(list(filtered_r2_1, filtered_r2_2))
+}
+
+# Apply filtering to ensure both datasets contain the same nodes
+filtered_r2_CB_H1 <- filter_common_nodes(mean_r2_CB, mean_r2_H1)
+mean_r2_CB_filtered <- filtered_r2_CB_H1[[1]]
+mean_r2_H1_filtered <- filtered_r2_CB_H1[[2]]
+
+```
+
+```{r}
+# Function to prepare r2 data for lollipop plot with proper labels
+prepare_r2_data <- function(r2_1, r2_2, label_1, label_2) {
+  merged_df <- r2_1 %>%
+    rename(R2_1 = R2) %>%
+    inner_join(r2_2 %>% rename(R2_2 = R2), by = c("Node", "country"))  # Merge data on node & country
+
+  # Rename groups and reorder labels
+  merged_df <- merged_df %>%
+    rename(low = R2_1, high = R2_2) %>%
+    mutate(
+      Group1 = label_1,
+      Group2 = label_2,
+      Node = factor(Node, levels = rev(shortnames_r2_CB))  # Assign correct node labels
+    )
+
+  return(merged_df)
+}
+
+# Prepare data for plotting (CB vs. CB + GCB) with correct labels
+r2_comparison_df <- prepare_r2_data(mean_r2_CB_filtered, mean_r2_H1_filtered, "CB", "CB + GCB")
+
+```
+
+```{r}
+# Function to create a lollipop plot 
+create_facet_r2_plot <- function(data) {
+  ggplot(data) +
+    geom_segment(aes(x = Node, xend = Node, y = low, yend = high), color = "grey") +
+    geom_point(aes(x = Node, y = low, color = Group1), size = 2) +  # Baseline r2
+    geom_point(aes(x = Node, y = high, color = Group2), size = 2) +  # Extended r2
+    coord_flip() +
+    scale_color_manual(
+      name = "Network Type",
+      values = c("CB" = "#006B3C", "CB + GCB" = "#966FD6")  # Assign colors
+    ) +
+    scale_y_continuous(limits = c(0.45, 0.75)) +
+    theme(
+      legend.position = "bottom",
+      legend.title = element_text(size = 10),
+      legend.text = element_text(size = 10),
+      axis.title.y = element_text(size = 14, face = "bold"),
+      axis.title.x = element_text(size = 10),
+      axis.text.y = element_text(size = 11),  # Ensure node labels are readable
+      axis.text.x = element_text(size = 10),
+      plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+    ) +
+    facet_wrap(~ country, scales = "fixed", ncol = 4, nrow = 2) +
+    xlab("") +
+    ylab("Mean Bootstrapped R²") +
+    ggtitle("Gains in R², Adding CM to the CB Networks")
+}
+
+# Generate & Print the Plot
+facet_r2_plot <- create_facet_r2_plot(r2_comparison_df)
+print(facet_r2_plot)
+
+
+```
+
+### Second comparison
+
+```{r}
+# Function to remove column 6 from all country lists
+remove_sixth_column <- function(r2_list) {
+  modified_list <- list()
+  
+  for (country in names(r2_list)) {
+    df <- as.data.frame(r2_list[[country]])  # Convert to dataframe
+    
+    if (ncol(df) >= 6) {  # Ensure column 6 exists before trying to remove it
+      df <- df[, -6]  # Remove the sixth column
+    }
+    
+    modified_list[[country]] <- df  # Store modified dataframe
+  }
+  
+  return(modified_list)
+}
+
+# Apply function to remove column 6 from `r2_H2`
+r2_H2 <- remove_sixth_column(r2_H2)
+
+# Function to rename columns using shortnames_r2_GCB
+rename_columns <- function(r2_list, shortnames) {
+  modified_list <- list()
+  
+  for (country in names(r2_list)) {
+    df <- as.data.frame(r2_list[[country]])  # Convert to dataframe
+    
+    if (ncol(df) == length(shortnames)) {  # Ensure matching column count
+      colnames(df) <- shortnames  # Assign new column names
+    } else {
+      warning(paste("Mismatch in column count for", country, "- Skipping renaming"))
+    }
+    
+    modified_list[[country]] <- df  # Store modified dataframe
+  }
+  
+  return(modified_list)
+}
+
+# Apply renaming to `r2_H2` and `r2_GCB`
+r2_H2 <- rename_columns(r2_H2, shortnames_r2_GCB)
+r2_GCB <- rename_columns(r2_GCB, shortnames_r2_GCB)
+
+```
+
+```{r}
+# Function to compute the mean r2 from bootstrapped results
+compute_mean_r2 <- function(r2_list) {
+  mean_r2_list <- list()
+
+  for (country in names(r2_list)) {
+    df <- as.data.frame(r2_list[[country]]) 
+    
+    # Compute the mean r2 per node
+    mean_df <- df %>%
+      summarise(across(everything(), mean, na.rm = TRUE)) %>%
+      pivot_longer(cols = everything(), names_to = "Node", values_to = "R2") %>%
+      mutate(country = country)
+    
+    mean_r2_list[[country]] <- mean_df
+  }
+
+  return(bind_rows(mean_r2_list))  
+}
+
+# Compute mean r2 values for GCB and H2 with correct labels
+mean_r2_GCB <- compute_mean_r2(r2_GCB)
+mean_r2_H2 <- compute_mean_r2(r2_H2)
+
+```
+
+```{r}
+# Function to compute the mean r2 from bootstrapped results
+compute_mean_r2 <- function(r2_list) {
+  mean_r2_list <- list()
+
+  for (country in names(r2_list)) {
+    df <- as.data.frame(r2_list[[country]])  
+    
+    # Compute the mean r2 per node
+    mean_df <- df %>%
+      summarise(across(everything(), mean, na.rm = TRUE)) %>%
+      pivot_longer(cols = everything(), names_to = "Node", values_to = "R2") %>%
+      mutate(country = country)
+    
+    mean_r2_list[[country]] <- mean_df
+  }
+
+  return(bind_rows(mean_r2_list))  
+}
+
+# Compute mean r2 values for GCB and H2 with correct labels
+mean_r2_GCB <- compute_mean_r2(r2_GCB)
+mean_r2_H2 <- compute_mean_r2(r2_H2)
+
+```
+
+```{r}
+# Function to filter out nodes that are not in both lists
+filter_common_nodes <- function(mean_r2_1, mean_r2_2) {
+  common_nodes <- intersect(mean_r2_1$Node, mean_r2_2$Node)  # Identify common nodes
+  filtered_r2_1 <- mean_r2_1 %>% filter(Node %in% common_nodes)
+  filtered_r2_2 <- mean_r2_2 %>% filter(Node %in% common_nodes)
+
+  return(list(filtered_r2_1, filtered_r2_2))
+}
+
+# Apply filtering 
+filtered_r2_GCB_H2 <- filter_common_nodes(mean_r2_GCB, mean_r2_H2)
+mean_r2_GCB_filtered <- filtered_r2_GCB_H2[[1]]
+mean_r2_H2_filtered <- filtered_r2_GCB_H2[[2]]
+
+```
+
+```{r}
+# Function to prepare r2 data for lollipop plot with proper labels
+prepare_r2_data <- function(r2_1, r2_2, label_1, label_2) {
+  merged_df <- r2_1 %>%
+    rename(R2_1 = R2) %>%
+    inner_join(r2_2 %>% rename(R2_2 = R2), by = c("Node", "country"))  # Merge data on node & country
+
+  # Rename groups and reorder labels
+  merged_df <- merged_df %>%
+    rename(low = R2_1, high = R2_2) %>%
+    mutate(
+      Group1 = label_1,
+      Group2 = label_2,
+      Node = factor(Node, levels = rev(shortnames_r2_GCB))  # Assign correct node labels
+    )
+
+  return(merged_df)
+}
+
+# Prepare data for plotting (GCB vs. GCB + CB) with correct labels
+r2_comparison_df <- prepare_r2_data(mean_r2_GCB_filtered, mean_r2_H2_filtered, "GCB", "GCB + CB")
+
+```
+
+```{r}
+# Function to create a lollipop plot with proper formatting & adjusted x-axis scale
+create_facet_r2_plot <- function(data) {
+  ggplot(data) +
+    geom_segment(aes(x = Node, xend = Node, y = low, yend = high), color = "grey") +
+    geom_point(aes(x = Node, y = low, color = Group1), size = 2) +  # Baseline R²
+    geom_point(aes(x = Node, y = high, color = Group2), size = 2) +  # Extended R²
+    coord_flip() +
+    scale_color_manual(
+      name = "Network Type",
+      values = c("GCB" = "#006B3C", "GCB + CB" = "#966FD6")  # Assign colors
+    ) +
+    scale_y_continuous(limits = c(0.20, 0.55)) +
+    theme(
+      legend.position = "bottom",
+      legend.title = element_text(size = 10),
+      legend.text = element_text(size = 10),
+      axis.title.y = element_text(size = 14, face = "bold"),
+      axis.title.x = element_text(size = 10),
+      axis.text.y = element_text(size = 11),  # Ensure node labels are readable
+      axis.text.x = element_text(size = 10),
+      plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+    ) +
+    facet_wrap(~ country, scales = "fixed", ncol = 4, nrow = 2) +  # Match previous panel settings
+    xlab("") +
+    ylab("Mean Bootstrapped R²") +
+    ggtitle("Gains in R², Adding CB to the CM Networks")
+}
+
+# Generate & Print the Plot
+facet_r2_plot2 <- create_facet_r2_plot(r2_comparison_df)
+print(facet_r2_plot2)
+
+
+```
+
+### Assemble
+
+```{r}
+#Patchwork
+Figure_4 = facet_r2_plot / facet_r2_plot2
+
+# Save
+ggsave(
+  filename = here("Output", "Figure_4.jpg"), plot = Figure_4,
+  width = 8.3, height = 11.7, dpi = 600)
+```
+
