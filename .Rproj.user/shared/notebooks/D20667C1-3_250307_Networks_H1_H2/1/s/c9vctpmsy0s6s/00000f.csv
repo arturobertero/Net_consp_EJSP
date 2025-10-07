@@ -1,0 +1,8 @@
+"0","# Means by country"
+"0","means_by_country <- data %>%"
+"0","  group_by(country) %>%"
+"0","  summarise("
+"0","    mean_CB = mean(CB, na.rm = TRUE),"
+"0","    mean_GCB = mean(GCB, na.rm = TRUE)"
+"0","  )"
+"0",""
