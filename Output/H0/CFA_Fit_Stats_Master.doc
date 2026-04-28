@@ -1,0 +1,183 @@
+<table style="border-collapse:collapse; border:none;">
+<tr>
+<th style="border-top: double; text-align:center; font-style:italic; font-weight:normal; padding:0.2cm; border-bottom:1px solid black; text-align:left; ">Dataset</th>
+<th style="border-top: double; text-align:center; font-style:italic; font-weight:normal; padding:0.2cm; border-bottom:1px solid black; ">Chi_Square</th>
+<th style="border-top: double; text-align:center; font-style:italic; font-weight:normal; padding:0.2cm; border-bottom:1px solid black; ">P_Value</th>
+<th style="border-top: double; text-align:center; font-style:italic; font-weight:normal; padding:0.2cm; border-bottom:1px solid black; ">CFI</th>
+<th style="border-top: double; text-align:center; font-style:italic; font-weight:normal; padding:0.2cm; border-bottom:1px solid black; ">TLI</th>
+<th style="border-top: double; text-align:center; font-style:italic; font-weight:normal; padding:0.2cm; border-bottom:1px solid black; ">RMSEA</th>
+<th style="border-top: double; text-align:center; font-style:italic; font-weight:normal; padding:0.2cm; border-bottom:1px solid black; col7">SRMR</th>
+<th style="border-top: double; text-align:center; font-style:italic; font-weight:normal; padding:0.2cm; border-bottom:1px solid black; col8">BIC</th>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study1_SUSPECTS_DEU</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">465.40</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.05</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.03</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">86765.58</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study1_SUSPECTS_ESP</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">341.97</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.04</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.03</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">89918.79</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study1_SUSPECTS_FRA</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">448.48</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.05</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.03</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">88763.20</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study1_SUSPECTS_GBR</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">343.42</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.99</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.04</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.03</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">86368.98</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study1_SUSPECTS_ITA</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">464.67</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.05</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.03</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">87510.92</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study1_SUSPECTS_POL</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">361.07</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.04</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.03</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">88560.71</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study1_SUSPECTS_SWE</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">513.74</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.98</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.97</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.05</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.03</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">85628.15</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study1_SUSPECTS_USA</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">245.23</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.99</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.99</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.03</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.02</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">90003.25</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study2_ACTS_USA</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">603.21</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.94</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.92</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.09</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.05</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">55109.37</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study3_CMQ_Australia</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">289.23</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.93</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.90</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.10</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.07</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">32607.47</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study3_CMQ_Brazil</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">276.84</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.92</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.89</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.10</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.06</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">33777.98</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study3_CMQ_Canada</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">433.68</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.92</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.89</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.13</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.07</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">31360.42</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study3_CMQ_Germany</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">428.78</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.92</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.89</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.12</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.07</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">32389.29</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study3_CMQ_Lebanon</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">218.78</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.92</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.89</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.09</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.05</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">31259.21</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study3_CMQ_Morocco</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">256.33</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.91</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.87</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.09</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.06</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">36652.81</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; ">Study3_CMQ_South Africa</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">309.08</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.92</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.89</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; ">0.11</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col7">0.06</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; col8">33350.09</td>
+</tr>
+<tr>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:left; border-bottom: double; ">Study3_CMQ_United States</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; border-bottom: double; ">633.40</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; border-bottom: double; ">0</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; border-bottom: double; ">0.86</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; border-bottom: double; ">0.80</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; border-bottom: double; ">0.15</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; border-bottom: double; col7">0.10</td>
+<td style=" padding:0.2cm; text-align:left; vertical-align:top; text-align:center; border-bottom: double; col8">33075.51</td>
+</tr>
+</table>
+

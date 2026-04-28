@@ -1,0 +1,10 @@
+Study 3: Canada & US Dimensionality Robustness Check
+======================================================
+Copy and paste the text below into your manuscript:
+
+--- Canada ---
+For Canada, EGA suggested an exploratory 3-dimension structure. A chi-square difference test showed this 3-factor model fit significantly better than the theoretical 2-factor model (Δχ²(2) = 340.4, p < .001). While the exploratory 3-factor structure yielded a statistical improvement in chi-square due to the estimation of additional parameters, the theory-driven 2-factor model maintained an adequate overall fit without artificially fragmenting the constructs. Therefore, we retained the theoretical 2-factor structure for cross-cultural consistency.
+
+--- United States ---
+For United States, EGA suggested an exploratory 3-dimension structure. However, a formal Confirmatory Factor Analysis (CFA) of this 3-factor structure failed to converge, indicating that the empirically derived dimensions were mathematically unstable. In contrast, the theory-driven 2-factor model converged successfully and demonstrated adequate fit. Therefore, we retained the 2-factor structure.
+

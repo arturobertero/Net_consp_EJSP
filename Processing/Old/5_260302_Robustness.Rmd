@@ -1,0 +1,551 @@
+---
+title: "5_260302_Robustness"
+author: "Arturo Bertero"
+date: "2026-03-02"
+output: html_document
+---
+
+# Input
+
+```{r}
+# Libraries
+library(pacman)
+p_load(tidyverse, here, mgm, bootnet, reshape2, ggplot2, huge, conflicted)
+
+# Options
+rm(list = ls())
+options(scipen = 999)
+conflicts_prefer(dplyr::filter, dplyr::select)
+
+# Data
+master_datasets <- readRDS(here("Input", "Secondary", "master_datasets.rds"))
+```
+
+# Processing
+
+## Preparation
+
+```{r}
+H1_matrices_npn <- list()
+H2_matrices_npn <- list()
+
+for (study_name in names(master_datasets)) {
+  
+  df <- master_datasets[[study_name]]
+  
+  # Base clean dataframe
+  df_clean <- df %>% select(country, CM, CB, starts_with("cm_"), starts_with("cb_")) %>% na.omit()
+  split_df <- split(df_clean[, setdiff(names(df_clean), "country")], df_clean$country)
+  
+  for (country_name in names(split_df)) {
+    list_name <- paste0(study_name, "_", country_name)
+    raw_matrix <- as.matrix(split_df[[country_name]])
+    
+    # H1 Setup: CM Index + cb_ items
+    h1_raw <- raw_matrix[, c("CM", grep("^cb_", colnames(raw_matrix), value = TRUE))]
+    # Apply nonparanormal transformation to the WHOLE H1 matrix
+    H1_matrices_npn[[list_name]] <- huge.npn(h1_raw, verbose = FALSE)
+    
+    # H2 Setup: CB Index + cm_ items
+    h2_raw <- raw_matrix[, c("CB", grep("^cm_", colnames(raw_matrix), value = TRUE))]
+    # Apply nonparanormal transformation to the WHOLE H2 matrix
+    H2_matrices_npn[[list_name]] <- huge.npn(h2_raw, verbose = FALSE)
+  }
+}
+```
+
+## Check one: results depends on the skewness of the items -> NPN networks
+
+### Bootstapping
+
+```{r}
+# # Initialize lists for bootstraps
+#  boot_results_H1_npn <- list()
+#  boot_results_H2_npn <- list()
+# 
+# # The loop
+# set.seed(123)
+#  for (name in names(H1_matrices_npn)) {
+#    cat("Bootstrapping NPN H1 for", name, "...\n")
+#    boot_results_H1_npn[[name]] <- bootnet(H1_matrices_npn[[name]], nBoots = 1000, nCores = 16, default = "mgm", statistics = "strength")
+#  }
+#  
+#  for (name in names(H2_matrices_npn)) {
+#    cat("Bootstrapping NPN H2 for", name, "...\n")
+#    boot_results_H2_npn[[name]] <- bootnet(H2_matrices_npn[[name]], nBoots = 1000, nCores = 16, default = "mgm", statistics = "strength")
+#  }
+# 
+# # Save
+#  saveRDS(boot_results_H1_npn, here("Input", "Secondary", "boot_H1_npn.rds"))
+#  saveRDS(boot_results_H2_npn, here("Input", "Secondary", "boot_H2_npn.rds"))
+
+# Load to save time
+boot_results_H1_npn <- readRDS(here("Input", "Secondary", "boot_H1_npn.rds"))
+boot_results_H2_npn <- readRDS(here("Input", "Secondary", "boot_H2_npn.rds"))
+
+```
+
+### Violins
+
+```{r}
+# H1 plot
+
+# Extract values dynamically
+boot_dataframes <- list()
+for (name in names(boot_results_H1_npn)) {
+  values <- boot_results_H1_npn[[name]][["bootTable"]][["value"]]
+  node_names <- colnames(H1_matrices_npn[[name]])
+  boot_dataframes[[name]] <- as.data.frame(matrix(values, ncol = length(node_names), byrow = TRUE))
+  colnames(boot_dataframes[[name]]) <- node_names
+}
+
+# Melt and Bind
+long_boot_list <- lapply(names(boot_dataframes), function(name) {
+  df <- boot_dataframes[[name]]
+  df$Dataset <- name 
+  melt(df, id.vars = "Dataset", variable.name = "Node", value.name = "Centrality")
+})
+long_boot_data <- do.call(rbind, long_boot_list)
+
+# Clean Names
+long_boot_data <- long_boot_data %>%
+  mutate(
+    CountryRaw = Dataset %>% str_remove_all("Study1_SUSPECTS_|Study2_ACTS_|Study3_CMQ_|Study3_GCB_"),
+    CountryName = case_when(
+      CountryRaw == "DEU" ~ "Germany", CountryRaw == "ESP" ~ "Spain",
+      CountryRaw == "FRA" ~ "France", CountryRaw == "GBR" ~ "United Kingdom",
+      CountryRaw == "ITA" ~ "Italy", CountryRaw == "POL" ~ "Poland",
+      CountryRaw == "SWE" ~ "Sweden", CountryRaw %in% c("USA", "USA_ACTS") ~ "United States",
+      TRUE ~ CountryRaw 
+    ),
+    ScaleAcronym = case_when(
+      grepl("Study1", Dataset) ~ "GCB5", grepl("Study2", Dataset) ~ "ACTS",
+      grepl("Study3_CMQ", Dataset) ~ "CMQ", grepl("Study3_GCB", Dataset) ~ "GCB"
+    ),
+    FacetTitle = paste0(CountryName, " - ", ScaleAcronym, " (NPN Transformed)")
+  )
+
+# Calculate CIs
+ci_data <- long_boot_data %>%
+  group_by(FacetTitle, Node) %>%
+  summarise(lower = quantile(Centrality, probs = 0.025), upper = quantile(Centrality, probs = 0.975), .groups = "drop")
+
+violin_colors <- ifelse(unique(long_boot_data$Node) == "CM", "#006B3C", "#966FD6")
+names(violin_colors) <- unique(long_boot_data$Node)
+
+plot_groups <- list(
+  "Study1" = "Study1_", "Study2" = "Study2_", 
+  "Study3_CMQ" = "Study3_CMQ_", "Study3_GCB" = "Study3_GCB_"
+)
+
+# Plot and Save
+for (group_name in names(plot_groups)) {
+  prefix <- plot_groups[[group_name]]
+  group_long_data <- long_boot_data %>% filter(grepl(paste0("^", prefix), Dataset))
+  group_ci_data <- ci_data %>% filter(FacetTitle %in% unique(group_long_data$FacetTitle))
+  
+  group_plot <- ggplot(group_long_data, aes(x = Node, y = Centrality, fill = Node)) +
+    geom_violin(alpha = 0.8) +
+    geom_errorbar(data = group_ci_data, aes(x = Node, ymin = lower, ymax = upper), width = 0.2, color = "black", inherit.aes = FALSE) +
+    scale_fill_manual(values = violin_colors) +
+    facet_wrap(~ FacetTitle, scales = "free_x", ncol = 2) + 
+    labs(title = paste("H1 NPN Centrality:", group_name), x = "Node", y = "Centrality") +
+    theme(legend.position = "none", axis.title.y = element_text(size = 14, face = "bold"),
+          axis.title.x = element_text(size = 14, face = "bold"), plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+          axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  plot_height <- max(6, ceiling(length(unique(group_long_data$FacetTitle)) / 2) * 3)
+  ggsave(here("Output", "Robustness", paste0("Robustness_NPN_H1_", group_name, ".pdf")), plot = group_plot, device = "pdf", width = 10, height = plot_height, units = "in")
+}
+```
+
+```{r}
+# H2 plot
+
+# Extract values 
+boot_dataframes_h2 <- list()
+for (name in names(boot_results_H2_npn)) {
+  values <- boot_results_H2_npn[[name]][["bootTable"]][["value"]]
+  node_names <- colnames(H2_matrices_npn[[name]])
+  boot_dataframes_h2[[name]] <- as.data.frame(matrix(values, ncol = length(node_names), byrow = TRUE))
+  colnames(boot_dataframes_h2[[name]]) <- node_names
+}
+
+# Melt and Bind
+long_boot_list_h2 <- lapply(names(boot_dataframes_h2), function(name) {
+  df <- boot_dataframes_h2[[name]]
+  df$Dataset <- name 
+  melt(df, id.vars = "Dataset", variable.name = "Node", value.name = "Centrality")
+})
+long_boot_data_h2 <- do.call(rbind, long_boot_list_h2)
+
+# Clean Names and Format Titles
+long_boot_data_h2 <- long_boot_data_h2 %>%
+  mutate(
+    CountryRaw = Dataset %>% str_remove_all("Study1_SUSPECTS_|Study2_ACTS_|Study3_CMQ_|Study3_GCB_"),
+    CountryName = case_when(
+      CountryRaw == "DEU" ~ "Germany", CountryRaw == "ESP" ~ "Spain",
+      CountryRaw == "FRA" ~ "France", CountryRaw == "GBR" ~ "United Kingdom",
+      CountryRaw == "ITA" ~ "Italy", CountryRaw == "POL" ~ "Poland",
+      CountryRaw == "SWE" ~ "Sweden", CountryRaw %in% c("USA", "USA_ACTS") ~ "United States",
+      TRUE ~ CountryRaw 
+    ),
+    ScaleAcronym = case_when(
+      grepl("Study1", Dataset) ~ "GCB5", grepl("Study2", Dataset) ~ "ACTS",
+      grepl("Study3_CMQ", Dataset) ~ "CMQ", grepl("Study3_GCB", Dataset) ~ "GCB"
+    ),
+    FacetTitle = paste0(CountryName, " - ", ScaleAcronym, " (NPN Transformed)")
+  )
+
+# Calculate CIs 
+ci_data_h2 <- long_boot_data_h2 %>%
+  group_by(FacetTitle, Node) %>%
+  summarise(lower = quantile(Centrality, probs = 0.025), upper = quantile(Centrality, probs = 0.975), .groups = "drop")
+
+# Colors
+violin_colors_h2 <- ifelse(unique(long_boot_data_h2$Node) == "CB", "#966FD6", "#006B3C")
+names(violin_colors_h2) <- unique(long_boot_data_h2$Node)
+
+# Plot and Save 
+for (group_name in names(plot_groups)) {
+  prefix <- plot_groups[[group_name]]
+  group_long_data_h2 <- long_boot_data_h2 %>% filter(grepl(paste0("^", prefix), Dataset))
+  group_ci_data_h2 <- ci_data_h2 %>% filter(FacetTitle %in% unique(group_long_data_h2$FacetTitle))
+  
+  group_plot_h2 <- ggplot(group_long_data_h2, aes(x = Node, y = Centrality, fill = Node)) +
+    geom_violin(alpha = 0.8) +
+    geom_errorbar(data = group_ci_data_h2, aes(x = Node, ymin = lower, ymax = upper), width = 0.2, color = "black", inherit.aes = FALSE) +
+    scale_fill_manual(values = violin_colors_h2) +
+    facet_wrap(~ FacetTitle, scales = "free_x", ncol = 2) + 
+    labs(title = paste("H2 NPN Centrality:", group_name), x = "Node", y = "Centrality") +
+    theme(legend.position = "none", axis.title.y = element_text(size = 14, face = "bold"),
+          axis.title.x = element_text(size = 14, face = "bold"), plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+          axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  plot_height <- max(6, ceiling(length(unique(group_long_data_h2$FacetTitle)) / 2) * 3)
+  ggsave(here("Output", "Robustness", paste0("Robustness_NPN_H2_", group_name, ".pdf")), plot = group_plot_h2, device = "pdf", width = 10, height = plot_height, units = "in")
+}
+```
+
+## Check 2: results depends on the different number of items in the CM and CB scales
+
+### Option 1: networks with no sumscores (i.e.: mean centrality of H0 networks)
+
+```{r}
+# item-level matrices 
+H0_matrices_item <- list()
+
+for (study_name in names(master_datasets)) {
+  df <- master_datasets[[study_name]]
+  
+  # Select items (no CM or CB indices)
+  df_clean <- df %>%
+    select(country, starts_with("cm_"), starts_with("cb_")) %>%
+    na.omit()
+  
+  split_df <- split(df_clean[, setdiff(names(df_clean), "country")], df_clean$country)
+  
+  for (country_name in names(split_df)) {
+    list_name <- paste0(study_name, "_", country_name)
+    H0_matrices_item[[list_name]] <- as.matrix(split_df[[country_name]])
+  }
+}
+
+# # Bootstrapping the Item-Level Networks
+# set.seed(123)
+#  boot_results_H0_item <- list()
+# 
+#  for (name in names(H0_matrices_item)) {
+#    cat("Bootstrapping Item-Level for", name, "...\n")
+#    boot_results_H0_item[[name]] <- bootnet(
+#      H0_matrices_item[[name]], nBoots = 1000, nCores = 16, 
+#      default = "mgm", statistics = "strength"
+#    )
+#  }
+#  saveRDS(boot_results_H0_item, here("Input", "Secondary", "boot_H0_item.rds"))
+
+# Load to save time
+ boot_results_H0_item <- readRDS(here("Input", "Secondary", "boot_H0_item.rds"))
+
+
+# Aggregate and plot
+
+# Extract and average the centrality scores
+boot_dataframes_item <- list()
+
+for (name in names(boot_results_H0_item)) {
+  
+  values <- boot_results_H0_item[[name]][["bootTable"]][["value"]]
+  node_names <- colnames(H0_matrices_item[[name]])
+  n_nodes <- length(node_names)
+  
+  # Reshape vector to matrix (Rows = Boots, Cols = Nodes)
+  values_matrix <- matrix(values, ncol = n_nodes, byrow = TRUE)
+  values_dataframe <- as.data.frame(values_matrix)
+  colnames(values_dataframe) <- node_names
+  
+  # Identify which columns belong to which construct
+  cm_cols <- grep("^cm_", node_names, value = TRUE)
+  cb_cols <- grep("^cb_", node_names, value = TRUE)
+  
+  # Calculate the avg centrality 
+  values_dataframe$Mean_CM <- rowMeans(values_dataframe[, cm_cols, drop = FALSE])
+  values_dataframe$Mean_CB <- rowMeans(values_dataframe[, cb_cols, drop = FALSE])
+  
+  # Keep only the aggregated columns
+  boot_dataframes_item[[name]] <- values_dataframe[, c("Mean_CM", "Mean_CB")]
+}
+
+# Melt and Bind
+long_boot_list_item <- lapply(names(boot_dataframes_item), function(name) {
+  df <- boot_dataframes_item[[name]]
+  df$Dataset <- name 
+  melt(df, id.vars = "Dataset", variable.name = "Construct", value.name = "Centrality")
+})
+long_boot_data_item <- do.call(rbind, long_boot_list_item)
+
+# Clean Names and Format Titles
+long_boot_data_item <- long_boot_data_item %>%
+  mutate(
+    CountryRaw = Dataset %>% str_remove_all("Study1_SUSPECTS_|Study2_ACTS_|Study3_CMQ_|Study3_GCB_"),
+    CountryName = case_when(
+      CountryRaw == "DEU" ~ "Germany", CountryRaw == "ESP" ~ "Spain",
+      CountryRaw == "FRA" ~ "France", CountryRaw == "GBR" ~ "United Kingdom",
+      CountryRaw == "ITA" ~ "Italy", CountryRaw == "POL" ~ "Poland",
+      CountryRaw == "SWE" ~ "Sweden", CountryRaw %in% c("USA", "USA_ACTS") ~ "United States",
+      TRUE ~ CountryRaw 
+    ),
+    ScaleAcronym = case_when(
+      grepl("Study1", Dataset) ~ "GCB5", grepl("Study2", Dataset) ~ "ACTS",
+      grepl("Study3_CMQ", Dataset) ~ "CMQ", grepl("Study3_GCB", Dataset) ~ "GCB"
+    ),
+    FacetTitle = paste0(CountryName, " - ", ScaleAcronym, " (Item Avg)")
+  )
+
+# Calculate CIs for the averages
+ci_data_item <- long_boot_data_item %>%
+  group_by(FacetTitle, Construct) %>%
+  summarise(lower = quantile(Centrality, probs = 0.025), upper = quantile(Centrality, probs = 0.975), .groups = "drop")
+
+# Dynamic Colors
+violin_colors_item <- c("Mean_CM" = "#006B3C", "Mean_CB" = "#966FD6")
+
+# Plot and Save for each group
+for (group_name in names(plot_groups)) {
+  prefix <- plot_groups[[group_name]]
+  group_long_data_item <- long_boot_data_item %>% filter(grepl(paste0("^", prefix), Dataset))
+  group_ci_data_item <- ci_data_item %>% filter(FacetTitle %in% unique(group_long_data_item$FacetTitle))
+  
+  group_plot_item <- ggplot(group_long_data_item, aes(x = Construct, y = Centrality, fill = Construct)) +
+    geom_violin(alpha = 0.8) +
+    geom_errorbar(data = group_ci_data_item, aes(x = Construct, ymin = lower, ymax = upper), 
+                  width = 0.2, color = "black", inherit.aes = FALSE) +
+    scale_fill_manual(values = violin_colors_item, labels = c("Mean_CB" = "Average CB Item", "Mean_CM" = "Average CM Item")) +
+    scale_x_discrete(labels = c("Mean_CB" = "Avg CB", "Mean_CM" = "Avg CM")) +
+    facet_wrap(~ FacetTitle, scales = "free_x", ncol = 2) + 
+    labs(
+      title = paste("Item-Level Aggregation Centrality:", group_name),
+      x = "Construct Averages",
+      y = "Average Centrality"
+    ) +
+    theme(legend.position = "none", axis.title.y = element_text(size = 14, face = "bold"),
+          axis.title.x = element_text(size = 14, face = "bold"), plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+          axis.text.x = element_text(angle = 0, hjust = 0.5, size = 12, face = "bold"))
+  
+  plot_height <- max(6, ceiling(length(unique(group_long_data_item$FacetTitle)) / 2) * 3)
+  ggsave(here("Output", "Robustness", paste0("Robustness_ItemAvg_", group_name, ".pdf")), plot = group_plot_item, device = "pdf", width = 10, height = plot_height, units = "in")
+}
+```
+
+### Option 2: dropping cols iterativelly with kind of a monte carlo simulation
+
+```{r}
+# ==========================================
+# 5. Monte Carlo Equal-Item Structural Check 
+# ==========================================
+
+set.seed(123) # Ensure reproducibility
+
+monte_carlo_results <- list()
+B <- 1000 
+
+for (study_name in names(master_datasets)) {
+  
+  df <- master_datasets[[study_name]]
+  df_clean <- df %>% select(country, starts_with("cm_"), starts_with("cb_")) %>% na.omit()
+  split_df <- split(df_clean[, setdiff(names(df_clean), "country")], df_clean$country)
+  
+  for (country_name in names(split_df)) {
+    list_name <- paste0(study_name, "_", country_name)
+    data_matrix <- as.matrix(split_df[[country_name]])
+    
+    all_cm <- grep("^cm_", colnames(data_matrix), value = TRUE)
+    all_cb <- grep("^cb_", colnames(data_matrix), value = TRUE)
+    
+    n_cm <- length(all_cm)
+    n_cb <- length(all_cb)
+    k <- min(n_cm, n_cb)
+    
+    cat("Starting Monte Carlo for", list_name, "- Fixing the smaller construct (k =", k, ") ...\n")
+    
+    # Initialize vectors for the 3 metrics
+    country_delta_mean <- numeric(B)
+    country_delta_max <- numeric(B)
+    country_cm_top1 <- numeric(B)
+    
+    for (i in 1:B) {
+      if (n_cm < n_cb) {
+        sampled_cm <- all_cm
+        sampled_cb <- sample(all_cb, k, replace = FALSE)
+      } else if (n_cb < n_cm) {
+        sampled_cm <- sample(all_cm, k, replace = FALSE)
+        sampled_cb <- all_cb
+      } else {
+        sampled_cm <- all_cm
+        sampled_cb <- all_cb
+      }
+      
+      iter_matrix <- data_matrix[, c(sampled_cm, sampled_cb)]
+      
+      mgm_iter <- mgm(
+        iter_matrix, type = rep("g", 2*k), level = rep(1, 2*k),
+        lambdaSel = "EBIC", lambdaGam = 0.25, ruleReg = "OR", 
+        verbose = FALSE, pbar = FALSE
+      )
+      
+      # Calculate Node Strength
+      strengths <- colSums(abs(mgm_iter$pairwise$wadj))
+      names(strengths) <- colnames(iter_matrix)
+      
+      # 1. Delta Mean
+      mean_cm <- mean(strengths[sampled_cm])
+      mean_cb <- mean(strengths[sampled_cb])
+      country_delta_mean[i] <- mean_cb - mean_cm
+      
+      # 2. Delta Max
+      max_cm <- max(strengths[sampled_cm])
+      max_cb <- max(strengths[sampled_cb])
+      country_delta_max[i] <- max_cb - max_cm
+      
+      # 3. Winner (Binary CM_Top1) 
+      winners <- names(strengths)[strengths == max(strengths)]
+      country_cm_top1[i] <- as.numeric(any(winners %in% sampled_cm))
+    }
+    
+    monte_carlo_results[[list_name]] <- data.frame(
+      Dataset = list_name,
+      Iteration = 1:B,
+      Delta_Mean = country_delta_mean,
+      Delta_Max = country_delta_max,
+      CM_Top1 = country_cm_top1
+    )
+  }
+}
+
+mc_data <- do.call(rbind, monte_carlo_results)
+
+# Clean Names and Format Titles
+mc_data_clean <- mc_data %>%
+  mutate(
+    CountryRaw = Dataset %>% str_remove_all("Study1_SUSPECTS_|Study2_ACTS_|Study3_CMQ_|Study3_GCB_"),
+    CountryName = case_when(
+      CountryRaw == "DEU" ~ "Germany", CountryRaw == "ESP" ~ "Spain",
+      CountryRaw == "FRA" ~ "France", CountryRaw == "GBR" ~ "United Kingdom",
+      CountryRaw == "ITA" ~ "Italy", CountryRaw == "POL" ~ "Poland",
+      CountryRaw == "SWE" ~ "Sweden", CountryRaw %in% c("USA", "USA_ACTS") ~ "United States",
+      TRUE ~ CountryRaw 
+    ),
+    ScaleAcronym = case_when(
+      grepl("Study1", Dataset) ~ "GCB5", grepl("Study2", Dataset) ~ "ACTS",
+      grepl("Study3_CMQ", Dataset) ~ "CMQ", grepl("Study3_GCB", Dataset) ~ "GCB"
+    ),
+    FacetTitle = paste0(CountryName, " - ", ScaleAcronym)
+  )
+
+saveRDS(mc_data_clean, here("Input", "Secondary", "MonteCarlo.rds"))
+
+# Load to save time
+#mc_data_clean <- readRDS(here("Input", "Secondary", "MonteCarlo.rds"))
+```
+
+```{r}
+# ==========================================
+# 6. Plotting the Extended Monte Carlo Results
+# ==========================================
+
+plot_groups <- list("Study1" = "Study1_", "Study2" = "Study2_", "Study3_CMQ" = "Study3_CMQ_", "Study3_GCB" = "Study3_GCB_")
+
+for (group_name in names(plot_groups)) {
+  prefix <- plot_groups[[group_name]]
+  group_mc_data <- mc_data_clean %>% filter(grepl(paste0("^", prefix), Dataset))
+  
+  plot_height <- max(5, ceiling(length(unique(group_mc_data$FacetTitle)) / 4) * 3.5)
+  
+  # PLOT A: Delta Mean (Block Average)
+  plot_A <- ggplot(group_mc_data, aes(x = "CB vs CM", y = Delta_Mean)) +
+    geom_violin(fill = "#966FD6", alpha = 0.7, color = "black") +
+    geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
+    geom_hline(yintercept = 0, color = "#E41A1C", linetype = "dashed", size = 1.2) + 
+    facet_wrap(~ FacetTitle, scales = "fixed", ncol = 4) + 
+    labs(
+      title = paste("Plot A - Delta Mean:", group_name),
+      subtitle = "Values > 0 indicate CB block average is higher than CM block average",
+      x = "", y = expression(paste(Delta, " Mean (CB - CM)"))
+    ) +
+    theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+                       plot.title = element_text(hjust = 0.5, face = "bold"))
+  
+  ggsave(here("Output", "MC", paste0("MC_PlotA_Mean_", group_name, ".pdf")), plot = plot_A, width = 12, height = plot_height)
+  
+  # PLOT B: Delta Max (The Hub Test)
+  plot_B <- ggplot(group_mc_data, aes(x = "CB vs CM", y = Delta_Max)) +
+    geom_violin(fill = "#FF7F00", alpha = 0.7, color = "black") + # Orange for distinction
+    geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
+    geom_hline(yintercept = 0, color = "#E41A1C", linetype = "dashed", size = 1.2) + 
+    facet_wrap(~ FacetTitle, scales = "fixed", ncol = 4) + 
+    labs(
+      title = paste("Plot B - Delta Max (Hub Test):", group_name),
+      subtitle = "Values > 0 indicate the absolute most central node is a specific Conspiracy Belief",
+      x = "", y = expression(paste(Delta, " Max (Max CB - Max CM)"))
+    ) +
+    theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+                       plot.title = element_text(hjust = 0.5, face = "bold"))
+  
+  ggsave(here("Output", "MC",  paste0("MC_PlotB_Max_", group_name, ".pdf")), plot = plot_B, width = 12, height = plot_height)
+  
+  # PLOT C: Top-1 Probability (Executive Summary)
+  # Calculate exact binomial intervals (Clopper-Pearson) for the Monte Carlo precision
+  summary_data <- group_mc_data %>%
+    group_by(FacetTitle) %>%
+    summarise(
+      Successes = sum(CM_Top1),
+      Total = n(),
+      Probability = mean(CM_Top1),
+      # Extracting exact confidence intervals safely handling 0% or 100% cases
+      Lower_CI = binom.test(Successes, Total)$conf.int[1],
+      Upper_CI = binom.test(Successes, Total)$conf.int[2],
+      .groups = "drop"
+    )
+  
+  plot_C <- ggplot(summary_data, aes(x = reorder(FacetTitle, Probability), y = Probability)) +
+    geom_point(color = "#006B3C", size = 4) +
+    geom_errorbar(aes(ymin = Lower_CI, ymax = Upper_CI), width = 0.2, color = "black") +
+    geom_hline(yintercept = 0.5, color = "grey50", linetype = "dashed") +
+    scale_y_continuous(limits = c(0, 1), labels = scales::percent_format()) +
+    coord_flip() + # Horizontal layout is much easier to read for dot plots
+    labs(
+      title = paste("Plot C - Probability CM is the Network Hub:", group_name),
+      subtitle = "Error bars represent 95% Monte Carlo simulation intervals", # EXPLICIT LABEL
+      x = "", y = "Probability (Top-1 Hub Status)"
+    ) +
+    theme_bw() + 
+    theme(
+      plot.title = element_text(face = "bold"), 
+      plot.subtitle = element_text(face = "italic"),
+      axis.text.y = element_text(size = 11, face = "bold")
+    )
+  
+  ggsave(here("Output", "MC", paste0("MC_PlotC_Prob_", group_name, ".pdf")), plot = plot_C, width = 10, height = max(4, nrow(summary_data) * 0.6))
+}
+```
+

@@ -1,0 +1,138 @@
+---
+title: "Data_managment"
+author: "Arturo Bertero"
+date: "2024-10-17"
+output: html_document
+---
+
+# Input
+
+```{r}
+#Libraries
+library(pacman)
+p_load(lavaan, rio, tidyverse, psych, here, stargazer, summarytools, visdat,
+       EGAnet, qgraph, semPlot, haven, janitor, readxl, labelled, countrycode,
+       openxlsx)
+
+#Options
+rm(list = ls())
+options(scipen = 99)
+```
+
+```{r}
+#Data SUSPECT
+SUSPECTS_GCB5 = read_rds(here("Input", "SUSPECTS.rds")) 
+
+# Data CCRS
+CCRS = read_csv(here("Input", "CCRS", "CCRS.csv")) %>% clean_names()
+
+# Enders et al
+# We use the Qualtrics 2021 dataset as it has the richest set of CBs (17 items) + the 4 ACTS items
+Study2_ACTS <- read_dta(here("Input", "Enders", "Qualtrics 2021.dta")) %>% 
+  clean_names()
+```
+
+
+# Processing
+
+## SUSPECTS
+
+```{r}
+# SUSPECTS is clean: right names and no NAs
+names(SUSPECTS_GCB5)
+summary(is.na.data.frame(SUSPECTS_GCB5))
+```
+
+## Enders
+
+```{r}
+# Clean study 2 (ACTS)
+Study2_ACTS = Study2_ACTS %>% 
+  # country label
+  mutate(country = "USA") %>%
+  
+  # Rename the 4 CM items
+  rename(
+    cm_1 = con1, 
+    cm_2 = con2, 
+    cm_3 = con3, 
+    cm_4 = con4,
+    
+    # Rename ONLY the 6 CB items that are on the 1-5 scale (11 are removed)
+    cb_1 = epstein, 
+    cb_2 = lightbulbs, 
+    cb_3 = fda, 
+    cb_4 = soros, 
+    cb_5 = billgates, 
+    cb_6 = cellphone
+  ) %>%
+  
+  # Select only the country and the renamed items, then drop NAs
+  select(country, starts_with("cm_"), starts_with("cb_")) %>%
+  na.omit() %>%
+  
+  # Calculate CM and CB indices 
+  mutate(
+    CM = rowMeans(select(., starts_with("cm_"))),
+    CB = rowMeans(select(., starts_with("cb_")))
+  ) %>%
+  
+  # Reorder cols
+  select(country, CM, CB, starts_with("cm_"), starts_with("cb_"))
+
+# Verify 
+map(Study2_ACTS, summary)
+
+```
+
+
+## CCRS
+
+```{r}
+# 1, Base: cb items asked in all countries and CB index
+CCRS_base <- CCRS %>%
+  mutate(
+    country = id_q2,
+    # Recompute CB index using ONLY the 4 items asked in all countries
+    CB = rowMeans(select(., id_q36_1:id_q36_4), na.rm = TRUE)
+  ) %>%
+  rename(
+    cb_1 = id_q36_1, 
+    cb_2 = id_q36_2, 
+    cb_3 = id_q36_3, 
+    cb_4 = id_q36_4
+  )
+
+# 2, Dataset A: Bruder et al. CMQ (5 items)
+Study3_CMQ <- CCRS_base %>%
+  rename(
+    CM = id_q33,
+    cm_1 = id_q33_1, cm_2 = id_q33_2, cm_3 = id_q33_3,
+    cm_4 = id_q33_4, cm_5 = id_q33_5
+  ) %>%
+  select(country, CM, CB, starts_with("cm_"), starts_with("cb_")) %>%
+  na.omit() 
+
+# Clean up environment
+remove(CCRS_base)
+
+# Verify the remaining Study 3 dataset
+map(Study3_CMQ, summary)
+```
+
+
+# Output
+
+```{r}
+# List  
+master_datasets <- list(
+  Study1_SUSPECTS = SUSPECTS_GCB5,
+  Study2_ACTS     = Study2_ACTS,
+  Study3_CMQ      = Study3_CMQ
+)
+
+# Save 
+saveRDS(master_datasets, here("Input", "Secondary", "master_datasets.rds"))
+
+```
+

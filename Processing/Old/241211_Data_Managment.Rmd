@@ -1,0 +1,495 @@
+---
+title: "241017_Data_managment"
+author: "Arturo Bertero"
+date: "2024-10-17"
+output: html_document
+---
+
+# Input
+
+```{r}
+#Libraries
+library(pacman)
+p_load(lavaan, rio, tidyverse, psych, here, stargazer, summarytools, visdat,
+       EGAnet, qgraph, semPlot, haven, janitor, readxl, labelled, countrycode,
+       openxlsx)
+
+#Options
+rm(list = ls())
+options(scipen = 99)
+```
+
+```{r}
+#Data SUSPECT
+data = read_dta(here("Input", "2024_suspects.dta")) %>%
+  clean_names()
+
+# Data Parlgov
+parlgov = read_excel(here("Input", "parlgov-stable.xlsx"))
+```
+
+
+# Processing
+
+## Select variables
+
+### Broad (all possible variables)
+
+```{r}
+# ISO codes
+data <- data %>%
+  mutate(
+    country_iso = countrycode(
+      dcountry, 
+      origin = "country.name", 
+      destination = "iso3c", 
+      custom_match = c(
+        "1" = "GBR",
+        "2" = "ITA",
+        "3" = "FRA",
+        "4" = "DEU",
+        "5" = "ESP",
+        "6" = "POL",
+        "7" = "SWE")))
+
+# Select
+broad = data %>% 
+  select(respid, country_iso, dcountry, a_gender, a_age_cl_1, a_age_cl_6, a_educ_1, q10,
+         q11_1:q11_5, q16, trst_q17_1:trst_q17_9, q18_1, q19_1:q19_8,  
+         q27, q33_1: q33_5, q38_1:q38_8, 
+         q42:q46, q51, q52, q59_1: q59_6, v_gen_it:v_gen_fr) 
+
+
+# Manual recode to save cases
+broad <- broad %>%
+  mutate(q42 = ifelse(q42 == 3, 1, 0), #knowledge
+         q43 = ifelse(q43 == 1, 1, 0),
+         q44 = ifelse(q44 == 3, 1, 0),
+         q45 = ifelse(q45 == 1, 1, 0),
+         q46 = ifelse(q46 == 3, 1, 0),
+         lr_no = if_else(q52 == 97, 1, 0), #dummy for ppl refusing lr (only 97)
+         #q52 = if_else(q52 == 97, 5, q52), # this line put 97 as 5 (midpoint of old scale) [i don t rescale]
+         v_gen_it = ifelse(v_gen_it %in% c(90, 91, 92, 98), 97, v_gen_it), #residual cathegory for vote choice (that i exclude)
+         v_gen_es = ifelse(v_gen_es %in% c(90, 91, 92, 98), 97, v_gen_es),
+         v_gen_de = ifelse(v_gen_de %in% c(90, 91, 92, 98), 97, v_gen_de),
+         v_gen_pl = ifelse(v_gen_pl %in% c(90, 91, 92, 98), 97, v_gen_pl),
+         v_gen_se = ifelse(v_gen_se %in% c(90, 91, 92, 98), 97, v_gen_se),
+         v_gen_uk = ifelse(v_gen_uk %in% c(90, 91, 92, 98), 97, v_gen_uk),
+         v_gen_fr = ifelse(v_gen_fr %in% c(90, 91, 92, 98), 97, v_gen_fr),
+         across(dcountry:v_gen_fr, ~ ifelse(. >= 97, NA, .)))  # recode as NA
+
+```
+
+```{r}
+# Further recode for a single vot_gen variable
+broad <- broad %>%
+  mutate(
+    v_gen_it = case_when(
+      v_gen_it == 1 ~ 1436,
+      v_gen_it == 2 ~ 382,
+      v_gen_it == 3 ~ 2155,
+      v_gen_it == 4 ~ 596,
+      v_gen_it == 5 ~ 2154,
+      v_gen_it == 6 ~ 2737,
+      v_gen_it == 7 ~ 465, #Alleanza Verdi-Sinistra
+      v_gen_it == 8 ~ 2794,
+      TRUE ~ as.numeric(v_gen_it)))
+
+broad <- broad %>%
+  mutate(
+    v_gen_uk = case_when(
+      v_gen_uk == 1 ~ 1556,
+      v_gen_uk == 2 ~ 773,
+      v_gen_uk == 3 ~ 1272, #Reform UK
+      v_gen_uk == 4 ~ 659,
+      v_gen_uk == 5 ~ 467,
+      v_gen_uk == 6 ~ 1284,
+      v_gen_uk == 7 ~ 689,
+      v_gen_uk == 8 ~ 319,
+      TRUE ~ as.numeric(v_gen_uk)))
+
+broad <- broad %>%
+  mutate(
+    v_gen_fr = case_when(
+      v_gen_fr == 1 ~ 2643,
+      v_gen_fr == 2 ~ 270,
+      v_gen_fr == 3 ~ 2644,
+      v_gen_fr == 4 ~ 873,
+      v_gen_fr == 5 ~ 1539,
+      v_gen_fr == 6 ~ 658,
+      v_gen_fr == 7 ~ 2399,
+      v_gen_fr == 8 ~ 686,
+      TRUE ~ as.numeric(v_gen_fr)))
+
+broad <- broad %>%
+  mutate(
+    v_gen_de = case_when(
+      v_gen_de == 1 ~ 808,
+      v_gen_de == 2 ~ 772,
+      v_gen_de == 3 ~ 558,
+      v_gen_de == 4 ~ 2253,
+      v_gen_de == 5 ~ 791,
+      v_gen_de == 6 ~ 543,
+      v_gen_de == 7 ~ 791, #Die Linke for matteo, but it is: Bündnis Sahra Wagenknecht – Für Vernunft und Gerechtigkeit(BSW)
+      TRUE ~ as.numeric(v_gen_de)))
+
+broad <- broad %>%
+  mutate(
+    v_gen_es = case_when(
+      v_gen_es == 1 ~ 902,
+      v_gen_es == 2 ~ 645,
+      v_gen_es == 3 ~ 757,
+      v_gen_es == 4 ~ 118, #sumar
+      v_gen_es == 5 ~ 2380,
+      v_gen_es == 6 ~ 2603,
+      v_gen_es == 7 ~ 2605,
+      v_gen_es == 8 ~ 1361,
+      TRUE ~ as.numeric(v_gen_es)))
+
+broad <- broad %>%
+  mutate(
+    v_gen_pl = case_when(
+      v_gen_pl == 1 ~ 528,
+      v_gen_pl == 2 ~ 512, #Koalicja Obywatelska Po .N Ipl Zieloni
+      v_gen_pl == 3 ~ 664, #Trzecia Droga Psl-Pl2050 Szymona Hołowni
+      v_gen_pl == 4 ~ 2790, #Nowa Lewica
+      v_gen_pl == 5 ~ 2398, #Konfederacja Wolność I Niepodległość
+      v_gen_pl == 6 ~ 334, #Bezpartyjni Samorządowcy
+      v_gen_pl == 7 ~ 1679,
+      TRUE ~ as.numeric(v_gen_pl)))
+
+broad <- broad %>%
+  mutate(
+    v_gen_se = case_when(
+      v_gen_se == 1 ~ 2557,
+      v_gen_se == 2 ~ 657,
+      v_gen_se == 3 ~ 1546,
+      v_gen_se == 4 ~ 882,
+      v_gen_se == 5 ~ 1461,
+      v_gen_se == 6 ~ 282,
+      v_gen_se == 7 ~ 1154,
+      v_gen_se == 8 ~ 2477,
+      TRUE ~ as.numeric(v_gen_se)))
+```
+
+```{r}
+#coalesce
+broad <- broad %>%
+  mutate(v_gen_suspect = coalesce(v_gen_it, v_gen_uk, v_gen_fr, v_gen_de, v_gen_es, v_gen_pl, v_gen_se)) %>% 
+  select(-c(v_gen_it, v_gen_uk, v_gen_fr, v_gen_de, v_gen_es, v_gen_pl, v_gen_se))
+
+# combine suspect and parlgov
+broad <- broad %>%
+  left_join(parlgov %>% select(party_id, left_right), 
+            by = c("v_gen_suspect" = "party_id"))
+
+# Rename
+broad <- broad %>%
+  rename(parlg_lr = left_right)
+
+# Check missing cases
+missing_parlg_lr <- broad %>%
+  filter(is.na(parlg_lr)) #M5S and Basque Country Unite generate missings
+
+#manual recode
+broad <- broad %>%
+  mutate(parlg_lr = case_when(
+    v_gen_suspect == 2155 ~ 5, #these parties now score 5 in left-right
+    v_gen_suspect == 2603 ~ 5,
+    TRUE ~ parlg_lr  
+  ))
+
+```
+
+```{r}
+# Polarity recode
+broad <- broad %>%
+  mutate(
+    q10 = (1 + 4) - q10,   # Reverse scores for hhincome (1 to 4 scale)
+    q27 = (1 + 5) - q27,   # Reverse scores for climate change actions (1 to 5 scale)
+    q51 = (1 + 4) - q51    # Reverse scores for pol interest (1 to 4 scale)
+  )
+
+```
+
+### Broad with indexes
+
+```{r}
+# Indexes
+broad <- broad %>%
+  mutate(
+    POP = rowMeans(select(., q11_1, q11_2, q11_3, q11_4, q11_5), na.rm = FALSE),
+    INST_TR = rowMeans(select(., trst_q17_1, trst_q17_2, trst_q17_3,
+                              trst_q17_4, trst_q17_5, trst_q17_6, 
+                              trst_q17_7, trst_q17_8, trst_q17_9), na.rm = FALSE),
+    VIC = rowMeans(select(., q19_1 ,q19_2 ,q19_3 ,q19_4 ,q19_5,
+                          q19_6 ,q19_7 ,q19_8), na.rm = FALSE),
+    GCB = rowMeans(select(., q33_1,q33_2,q33_3,q33_4,q33_5), na.rm = FALSE),
+    CB = rowMeans(select(., q38_1,q38_2,q38_3,q38_4,q38_5,
+                         q38_6,q38_7,q38_8), na.rm = FALSE),
+    CK = rowMeans(select(., q42,q43,q44,q45,q46), na.rm = FALSE),
+    PV = rowMeans(select(., q59_1,q59_2,q59_3,q59_4,q59_5,q59_6), na.rm = FALSE)
+  )
+
+```
+
+```{r}
+# reorder, names, variables' labels
+
+# select
+broad = broad %>% 
+  select(
+  respid, country_iso, a_gender, a_age_cl_1, a_age_cl_6, a_educ_1, q10, q18_1, q51, q52, lr_no, #sociodemog
+  v_gen_suspect, parlg_lr, q27,  #self-reported behaviors
+  POP, INST_TR, VIC, GCB, CB, CK, PV, # indexes
+  q11_1 ,q11_2 ,q11_3 ,q11_4 ,q11_5, #POP
+  q16, trst_q17_1, trst_q17_2, trst_q17_3, trst_q17_4, trst_q17_5, trst_q17_6, trst_q17_7, trst_q17_8, trst_q17_9, #trust
+  q19_1, q19_2, q19_3, q19_4, q19_5, q19_6, q19_7, q19_8, #VIC
+  q33_1, q33_2, q33_3, q33_4, q33_5, #GCB
+  q38_1, q38_2, q38_3, q38_4, q38_5, q38_6, q38_7, q38_8, #CB
+  q42, q43, q44, q45, q46, #CK
+  q59_1, q59_2, q59_3, q59_4, q59_5, q59_6 #PV
+)
+
+# names and labels
+new_col_names <- c(
+  "respid", "country", "gender", "age", "age_c", "educ", "hhincome", "sm_use", 
+  "pol_int", "lr", "lr_no", "vote", "parlg_lr", "cli_act", "POP", 
+  "INST_TR", "VIC", "GCB", "CB", "CK", "PV", "pop_1", "pop_2", "pop_3", "pop_4", 
+  "pop_5", "gen_tr", "inst_tr_1", "inst_tr_2", "inst_tr_3", "inst_tr_4", 
+  "inst_tr_5", "inst_tr_6", "inst_tr_7", "inst_tr_8", "inst_tr_9", "vic_1", 
+  "vic_2", "vic_3", "vic_4", "vic_5", "vic_6", "vic_7", "vic_8", "gcb_1", 
+  "gcb_2", "gcb_3", "gcb_4", "gcb_5", "cb_1", "cb_2", "cb_3", "cb_4", "cb_5", 
+  "cb_6", "cb_7", "cb_8", "ck_1", "ck_2", "ck_3", "ck_4", "ck_5", "pv_1", 
+  "pv_2", "pv_3", "pv_4", "pv_5", "pv_6"
+)
+
+# Define the labels for the columns
+new_labels <- c(
+  "Respondent ID", "Country", "Gender", "Age", "Age cathegoric", "Education", 
+  "Household's income", "Use social media several times a day", 
+  "Political interest", "Self-placement left-right", "Refusing to place on lr", 
+  "Vote national (codes)", "lr of party (parlgov)",  
+  "Reduce standard of living for environment", "Populist attitudes", 
+  "Institutional trust", "Victimhood", "Generic Conspiracy Belief scale", 
+  "Conspiracy beliefs", "Conspiracy knowledge", "Political violence", 
+  "Politicians in Parliament must follow the will of the people.", 
+  "The people, and not politicians, should make our most important policy decisions", 
+  "I would rather be represented by a citizen than by a specialized politician", 
+  "Elected officials talk too much and take too little action.", 
+  "What people call 'compromise' in politics is just selling out on one's principle", 
+  "Most people can be trusted or you can't be too careful in dealing with people?", 
+  "Trust - The national Parliament", "Trust - The regional and local institutions", 
+  "Trust - The police", "Trust - The Healthcare system", "Trust - The judicial system", 
+  "Trust - The European Union", "Trust - Scientists", "Trust - The Church", 
+  "Trust - The UN", "The system works against people like me", 
+  "The world is 'doing it' to me and there's nothing I can do about it", 
+  "The world is out to get me", "The system is rigged to benefit a select few", 
+  "I rarely get what I deserve in life", "Great things never come to me", 
+  "I never seem to get an extra break", "I usually have to settle for less", 
+  "States allow/commit acts of terrorism on their soil, concealing their involvement", 
+  "Evidence of contact with aliens is hidden from the public.", 
+  "Many advanced technologies that would damage today's big industry are hidden.", 
+  "A small group secretly manipulates world events.", 
+  "New drugs or technologies being conducted on citizens without their knowledge.", 
+  "Governments and the nuclear industry are poisoning the public (radioactive food)", 
+  "AIDS was created by the CIA and deliberately spread by the WHO.", 
+  "The US Ministry of Defence is experimenting to control people's minds.", 
+  "The vaporous contrails are chemtrails which disperse harmful chemical agents.", 
+  "The United Nations secret aim is to create a World Government.", 
+  "The world is secretly ruled by the extremely powerful bankers Rothschild family.", 
+  "Monsanto Company is maneuvering to control the world's food supply.", 
+  "The 2014 Ebola epidemic was orchestrated by Big Pharma to profit from vaccines.", 
+  "According to some, what does 'Project Blue Beam' represent?", 
+  "What is the so-called 'Pizzagate'?", "What is the 'MKUltra' program?", 
+  "Who is David Icke?", "What is the Trilateral Commission?", 
+  "How acceptable - Hurting a public official", "How acceptable - Protest violently", 
+  "How acceptable - Destroying other people's property", 
+  "How acceptable - Publicly propagating the boycott of an election", 
+  "How acceptable - Inciting violence", 
+  "How acceptable - Arming oneself and isolating oneself from society"
+)
+
+# Rename columns
+names(broad) <- new_col_names
+
+# Assign labels to columns
+for (i in seq_along(new_col_names)) {
+  var_label(broad[[new_col_names[i]]]) <- new_labels[i]
+}
+
+```
+
+```{r}
+# join country_v_gen* with labels
+broad <- broad %>%
+  left_join(
+    data %>% select(respid, v_gen_it, v_gen_es, v_gen_de, v_gen_pl, v_gen_se, v_gen_uk, v_gen_fr), 
+    by = "respid"
+  )
+
+# relocate
+broad <- broad %>%
+  relocate(v_gen_it, v_gen_es, v_gen_de, v_gen_pl, v_gen_se, v_gen_uk, v_gen_fr, .after = parlg_lr)
+```
+
+```{r}
+# Save labels
+existing_labels <- sapply(broad, var_label)
+
+
+# Labels of values, and conversion to factor
+broad$country = factor(broad$country)
+
+broad$gender = factor(broad$gender, 
+                       levels = c(1, 2), 
+                       labels = c("Man", "Woman or other"))
+
+broad$age_c = factor(broad$age_c, 
+                       levels = c(1:6), 
+                       labels = c("18-24", "25-34", "35-44", "45-54", "55-64", "65-99"))
+
+broad$educ <- cut(broad$educ,
+                  breaks = c(-Inf, 2, 5, 8), 
+                  labels = c("Less than high school", "High school or incomplete college", "University or more"))
+
+broad$hhincome = factor(broad$hhincome, 
+                       levels = c(1:4), 
+                       labels = c("Difficulty", "Some difficulties", "Cover expanses", "Comfort"))
+
+broad$sm_use = factor(broad$sm_use, 
+                       levels = c(0:1), 
+                       labels = c("Less than several times a day", "Several times a day"))
+
+broad$pol_int = labelled::labelled(broad$pol_int, 
+                                    labels = c("Low" = 1, "High" = 4))
+
+broad$lr = labelled::labelled(broad$lr, 
+                                    labels = c("Left" = 0, "Right" = 10))
+
+broad$lr_no = factor(broad$lr_no, 
+                       levels = c(0:1), 
+                       labels = c("Placing", "Refusing"))
+
+broad$v_gen_it <- to_factor(broad$v_gen_it)
+broad$v_gen_es <- to_factor(broad$v_gen_es)
+broad$v_gen_de <- to_factor(broad$v_gen_de)
+broad$v_gen_pl <- to_factor(broad$v_gen_pl)
+broad$v_gen_se <- to_factor(broad$v_gen_se)
+broad$v_gen_uk <- to_factor(broad$v_gen_uk)
+broad$v_gen_fr <- to_factor(broad$v_gen_fr)
+
+broad$cli_act = labelled::labelled(broad$cli_act, 
+                                    labels = c("Disagree" = 1, "Agree" = 5))
+
+broad <- broad %>%
+  mutate(across(c(POP, pop_1, pop_2, pop_3, pop_4, pop_5), 
+                ~ labelled::labelled(., labels = c("Low" = 1, "High" = 5))))
+
+broad <- broad %>%
+  mutate(across(c(gen_tr, INST_TR,
+                  inst_tr_1, inst_tr_2, inst_tr_3, inst_tr_4, inst_tr_5,
+                  inst_tr_6, inst_tr_7, inst_tr_8, inst_tr_9), 
+                ~ labelled::labelled(., labels = c("Low" = 0, "High" = 10))))
+
+broad <- broad %>%
+  mutate(across(c(VIC, vic_1, vic_2, vic_3, vic_4, vic_5, 
+                  vic_6, vic_7, vic_8), 
+                ~ labelled::labelled(., labels = c("Low" = 1, "High" = 5))))
+
+broad <- broad %>%
+  mutate(across(c(GCB, gcb_1, gcb_2, gcb_3, gcb_4, gcb_5), 
+                ~ labelled::labelled(., labels = c("Low" = 1, "High" = 5))))
+
+broad <- broad %>%
+  mutate(across(c(CB, cb_1, cb_2, cb_3, cb_4, cb_5, 
+                  cb_6, cb_7, cb_8), 
+                ~ labelled::labelled(., labels = c("Low" = 1, "High" = 5))))
+
+broad <- broad %>%
+  mutate(across(c(CK, ck_1, ck_2, ck_3, ck_4, ck_5), 
+                ~ labelled::labelled(., labels = c("Low" = 0, "High" = 1))))
+
+broad <- broad %>%
+  mutate(across(c(PV, pv_1, pv_2, pv_3, pv_4, pv_5, pv_6), 
+                ~ labelled::labelled(., labels = c("Low" = 1, "High" = 7))))
+
+# Restore old labels
+for (col in names(existing_labels)) {
+  var_label(broad[[col]]) <- existing_labels[[col]]
+}
+```
+
+## Smaller country dataset for networks
+
+```{r}
+# Country dataset
+small = broad %>% 
+  select(cb_1:cb_8, GCB, country) %>% 
+  na.omit()
+split_data <- split(small[, setdiff(names(small), "country")], small$country)
+
+# Country dataset for h1b
+small_h1b = broad %>% 
+  select(gcb_1:gcb_5, CB, country) %>% 
+  na.omit()
+split_data_h1b <- split(small_h1b[, setdiff(names(small_h1b), "country")], small_h1b$country)
+
+# Country dataset
+small2 = broad %>% 
+  select(cb_1:cb_8, POP, country) %>% 
+  na.omit()
+split_data2 <- split(small2[, setdiff(names(small2), "country")], small2$country)
+
+# Country dataset
+small3 = broad %>% 
+  select(cb_1:cb_8, VIC, country) %>% 
+  na.omit()
+split_data3 <- split(small3[, setdiff(names(small3), "country")], small3$country)
+
+# Country dataset
+small4 = broad %>% 
+  select(cb_1:cb_8, INST_TR, country) %>% 
+  na.omit()
+split_data4 <- split(small4[, setdiff(names(small4), "country")], small4$country)
+
+# Country dataset
+small5 = broad %>% 
+  select(cb_1:cb_8, PV, country) %>% 
+  na.omit()
+split_data5 <- split(small5[, setdiff(names(small5), "country")], small5$country)
+
+# Country dataset
+small6 = broad %>% 
+  select(cb_1:cb_8, parlg_lr, country) %>% 
+  na.omit()
+split_data6 <- split(small6[, setdiff(names(small6), "country")], small6$country)
+
+# Country dataset
+small7 = broad %>% 
+  select(cb_1:cb_8, pol_int, country) %>% 
+  na.omit()
+split_data7 <- split(small7[, setdiff(names(small7), "country")], small7$country)
+
+```
+
+
+# Output
+Broad has missing cases. It is useful to build other (smaller) dataset, since 
+all data is already labelled and ready to be cleaned with a simple NA.omit()
+
+The obj in split_data do not have missings and are ready to be used for networks.
+
+```{r}
+# Save 
+saveRDS(broad, here("Input", "Secondary", "data.rds"))
+saveRDS(split_data, here("Input", "Secondary", "country_data.rds"))
+saveRDS(split_data_h1b, here("Input", "Secondary", "country_data_h1b.rds"))
+saveRDS(split_data2, here("Input", "Secondary", "country_data2.rds"))
+saveRDS(split_data3, here("Input", "Secondary", "country_data3.rds"))
+saveRDS(split_data4, here("Input", "Secondary", "country_data4.rds"))
+saveRDS(split_data5, here("Input", "Secondary", "country_data5.rds"))
+saveRDS(split_data6, here("Input", "Secondary", "country_data6.rds"))
+saveRDS(split_data7, here("Input", "Secondary", "country_data7.rds"))
+```
+

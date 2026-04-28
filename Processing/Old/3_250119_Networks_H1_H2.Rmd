@@ -1,0 +1,728 @@
+---
+title: "Centrality hypotheses, Connectivity hypotheses"
+author: Arturo Bertero
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+date: "2024-12-11"
+---
+
+```{r}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  results = "markup", # Show output
+  warning = FALSE,  # Do not show warnings
+  message = FALSE   # Do not show messages
+)
+
+```
+
+```{r}
+#Libraries
+library(pacman)
+p_load(lavaan, rio, tidyverse, psych, here, stargazer, summarytools, visdat,
+       EGAnet, qgraph, ggplot2, haven, janitor, readxl, labelled, reshape2,
+       openxlsx, mgm, bootnet, conflicted, magick)
+
+#Options
+rm(list = ls())
+options(scipen = 999)
+#conflicts
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+```
+
+# Input
+
+## Merge US and SUSPECTS
+
+```{r}
+# Import cleaned data
+data = readRDS(here("Input", "Secondary", "data.rds")) 
+us = readRDS(here("Input", "Secondary", "USA_clean.rds"))
+```
+
+```{r}
+#Na.omit and common structure
+data = data %>% 
+  select(country, POP, INST_TR, VIC, GCB, CB, gcb_1:cb_8) %>% 
+  na.omit()
+
+us = us %>% 
+  select(country, POP, INST_TR, VIC, GCB, CB, gcb_1:cb_8) %>% 
+  na.omit()
+```
+
+```{r}
+#Append
+data = bind_rows(data, us)
+```
+
+```{r}
+# Means by country
+means_by_country <- data %>%
+  group_by(country) %>%
+  summarise(
+    mean_CB = mean(CB, na.rm = TRUE),
+    mean_GCB = mean(GCB, na.rm = TRUE)
+  )
+
+```
+
+
+## Smaller country dataset for networks
+
+```{r}
+# List with country dataset 
+
+#H1: cbs+GCB
+H1 = data %>% 
+ select(cb_1:cb_8, GCB, country) %>% 
+ na.omit()
+H1_split_data <- split(H1[, setdiff(names(H1), "country")], H1$country)
+
+#H2: gcbs+CB
+H2 = data %>% 
+ select(gcb_1:gcb_5, CB, country) %>% 
+ na.omit()
+H2_split_data <- split(H2[, setdiff(names(H2), "country")], H2$country)
+
+#H1b: gcbs+INST_TR
+H1b = data %>% 
+ select(cb_1:cb_8, INST_TR, country) %>% 
+ na.omit()
+H1b_split_data <- split(H1b[, setdiff(names(H1b), "country")], H1b$country)
+
+#H1c: gcbs+POP
+H1c = data %>% 
+ select(cb_1:cb_8, POP, country) %>% 
+ na.omit()
+H1c_split_data <- split(H1c[, setdiff(names(H1c), "country")], H1c$country)
+
+#H1d: gcbs+VIC
+H1d = data %>% 
+ select(cb_1:cb_8, VIC, country) %>% 
+ na.omit()
+H1d_split_data <- split(H1d[, setdiff(names(H1d), "country")], H1d$country)
+
+#All Vs
+all_data_split_data = data %>% 
+ select(country, POP, INST_TR, VIC, GCB, CB) %>% 
+ na.omit()
+all_data_split_data <- split(all_data_split_data[, setdiff(names(all_data_split_data), "country")], all_data_split_data$country)
+```
+
+```{r}
+#Country_data obj as matrix
+H1_split_data <- lapply(H1_split_data, function(sublist) as.matrix(sublist))
+H1b_split_data <- lapply(H1b_split_data, function(sublist) as.matrix(sublist))
+H1c_split_data <- lapply(H1c_split_data, function(sublist) as.matrix(sublist))
+H1d_split_data <- lapply(H1d_split_data, function(sublist) as.matrix(sublist))
+H2_split_data <- lapply(H2_split_data, function(sublist) as.matrix(sublist))
+all_data_split_data = lapply(all_data_split_data, function(sublist) as.matrix(sublist))
+```
+
+```{r}
+# objects for network 
+shortnames = c("rad_food","aids","elf","chemtrails",
+              "worldgov","rothschild","monsanto","ebola", "CM")
+
+# Country color palette 
+country_colors <- c(
+  "DEU" = "#E41A1C", "ESP" = "#377EB8", "FRA" = "#4DAF4A", 
+  "GBR" = "#984EA3", "ITA" = "#FF7F00", "POL" = "#ffcf33",
+  "SWE" = "#A65628", "USA" = "#008080")
+
+Totalgroup_comm <- list(
+  "Conspiracy Beliefs" = c(1:8),
+  "Conspiracy Mentality" = c(9))
+
+Totalgroup_cols <- c("#966FD6B3", "#008B8BB3") 
+
+#type
+type = c("g","g","g","g","g","g","g","g","g")
+
+#level
+level = c(1,1,1,1,1,1,1,1,1)
+
+```
+
+
+# Processing
+
+## H1: GCB is the most central node
+
+### Estimation and network plotting
+
+```{r}
+# Initialize an empty list to store node-wise R² results
+node_r2_results <- list()
+
+# Network estimation and plotting loop
+for (country_name in names(H1_split_data)) {
+  
+  # Access country data
+  country_matrix <- H1_split_data[[country_name]]
+  
+  # Network estimation
+  mgm_result <- mgm(country_matrix, type = type, level = level,
+                    lambdaSel = "CV", ruleReg = "OR", verbose = FALSE, pbar = F)
+  
+  # Predictability (Extract node-wise R² values)
+  pred_result <- predict(object = mgm_result, data = country_matrix, errorCon = 'R2')
+
+  # Store node-wise R² values in the list
+  node_r2_results[[country_name]] <- pred_result$errors[,2]  # Extracting R² values
+  
+  # Path and name
+  output_path <- here("Output", "Country_networks", "H1", paste0(country_name))
+  
+  # Plot with R² visualization
+  qgraph(
+    mgm_result$pairwise$wadj, layout = 'spring', labels = shortnames,
+    groups = Totalgroup_comm, color = Totalgroup_cols, legend = FALSE,
+    title = country_name, edge.color = mgm_result$pairwise$edgecolor_cb,
+    vTrans = 180, borders = TRUE, vsize = 11, esize = 11, label.cex = 0.60,
+    label.scale = F, filetype = "jpg", filename = output_path,
+    pie = pred_result$errors[,2],  # Using the same R² values for visualization
+    pieColor = rep('#FFFF00', length(shortnames))
+  )
+}
+
+# Save pred_result
+saveRDS(node_r2_results, here("Input", "Secondary", "pred_result_8cb_GCB.rds"))
+
+```
+
+```{r}
+# Define input directory and output file path
+input_directory <- here("Output", "Country_networks", "H1")
+output_file <- here("Output", "H1_Net_comp.jpg")
+
+# Read, scale for maximum quality, and combine all JPG files in a 4x2 layout
+network_images <- lapply(
+  list.files(input_directory, pattern = "\\.jpg$", full.names = TRUE),
+  function(file) image_scale(image_read(file), "2000x2000") # Further increase image size
+)
+
+# Create a composite image with higher resolution and layout
+composite_image <- image_montage(
+  image_join(network_images),
+  tile = "4x2",
+  geometry = "+20+20" # Add more spacing between images
+)
+
+# Save the composite image with maximum quality
+image_write(composite_image, path = output_file, format = "jpg", density = 300, quality = 100)
+```
+
+```{r}
+# Define input directory and output file path
+input_directory <- here("Output", "Country_networks", "H1")
+output_file <- here("Output", "H1_Net_comp_long.jpg")
+
+# Read, scale for maximum quality, and combine all JPG files in a 4x2 layout
+network_images <- lapply(
+  list.files(input_directory, pattern = "\\.jpg$", full.names = TRUE),
+  function(file) image_scale(image_read(file), "2000x2000") # Further increase image size
+)
+
+# Create a composite image with higher resolution and layout
+composite_image <- image_montage(
+  image_join(network_images),
+  tile = "2x4",
+  geometry = "+20+20" # Add more spacing between images
+)
+
+# Save the composite image with maximum quality
+image_write(composite_image, path = output_file, format = "jpg", density = 300, quality = 100)
+```
+
+```{r}
+# Print USA network with different layout to assemble Figure 1
+  
+  # Network estimation
+  mgm_result <- mgm(H1_split_data$USA, type = type, level = level,
+                    lambdaSel = "CV", ruleReg = "OR", verbose = FALSE, pbar = F)
+  
+  # Predictability
+  pred_result <- predict(object = mgm_result, data = country_matrix, errorCon = 'R2')
+  
+  # Define save path
+  output_path <- here("Output", "Country_networks", "H1", "USA_Fig1.jpg")
+
+  # Open a JPG device with custom dimensions
+  jpeg(here("Output", "Country_networks", "H1", "USA_Fig1.jpg"),
+       width = 10, height = 5.3, units = "in", res = 600)
+
+  # Generate the qgraph plot
+  qgraph(
+  mgm_result$pairwise$wadj, layout = 'spring', labels = shortnames,
+  groups = Totalgroup_comm, color = Totalgroup_cols, legend = FALSE,
+  title = "H1: CM index and CB items", edge.color = mgm_result$pairwise$edgecolor_cb,
+  vTrans = 180, borders = TRUE, vsize = 7, esize = 6, label.cex = 0.60,
+  label.scale = F, 
+  pie = pred_result$errors[,2], 
+  pieColor = rep('#FFFF00', length(shortnames))
+  )
+
+  # Close the device
+  dev.off()
+
+```
+
+### Bootstrapped network estimation
+
+```{r}
+# mgm boots by country
+
+# # Empty list 
+# boot_results <- list()
+# 
+# # Loop for country 
+# for (country_name in names(H1_split_data)) {
+#  
+#  # Access country data 
+#  country_matrix <- H1_split_data[[country_name]]
+#  
+#  # Bootstrapp
+#  boot_result <- bootnet(
+#    country_matrix,
+#    nBoots = 1000,
+#    nCores = 8,
+#    default = "mgm",
+#    statistics = "strength"
+#  )
+#  
+#  # Save results 
+#  boot_results[[country_name]] <- boot_result
+# }
+# 
+# 
+# # Save locally
+# saveRDS(boot_results, here("Input", "Secondary", "boot_H1.rds"))
+
+# Load to save time
+boot_results = readRDS(here("Input", "Secondary", "boot_H1.rds")) 
+```
+
+### H1 plot: comparison of bootstrapped centrality scores
+
+```{r}
+# Data managment of bootstrap object
+
+# Nodes
+node_names <- c("rad_food","aids","elf","chemtrails",
+              "worldgov","rothschild","monsanto","ebola", "CM")
+
+# Empty list
+boot_dataframes <- list()
+
+# Loop for country
+for (country_name in names(boot_results)) {
+  
+  # Extract the vector of 9000 values 
+  values <- boot_results[[country_name]][["bootTable"]][["value"]]
+  
+  # Check if the length of values is divisible by 9
+  if (length(values) %% length(node_names) != 0) {
+    stop(paste("Length of values for", country_name, "is not a multiple of", length(node_names)))
+  }
+  
+  # Reshape the values into a matrix with 9 columns
+  values_matrix <- matrix(values, ncol = length(node_names), byrow = TRUE)
+  
+  # Convert the matrix into a data frame 
+  values_dataframe <- as.data.frame(values_matrix)
+  colnames(values_dataframe) <- node_names
+  
+  # Add the country-specific data frame to the list
+  boot_dataframes[[country_name]] <- values_dataframe
+}
+```
+
+```{r}
+# Plot for H1
+
+# Gather centrality score in long format
+long_boot_data <- do.call(rbind, lapply(names(boot_dataframes), function(country_name) {
+  df <- boot_dataframes[[country_name]]
+  df$country <- country_name # Add a column for the country
+  return(df)
+})) %>%
+  melt(id.vars = "country", variable.name = "Node", value.name = "Centrality")  
+
+# Calculate 95% bootstrapped CIs
+ci_data <- long_boot_data %>%
+  group_by(country, Node) %>%
+  summarise(
+    lower = quantile(Centrality, probs = 0.025),
+    upper = quantile(Centrality, probs = 0.975),
+    .groups = "drop"
+  )
+
+# Colors 
+violin_colors <- ifelse(unique(long_boot_data$Node) == "CM", "#008B8BB3", "#966FD6B3")
+
+# Plot
+H1_plot = ggplot(long_boot_data, aes(x = Node, y = Centrality, fill = Node)) +
+  geom_violin(alpha = 0.8) +
+  geom_errorbar(data = ci_data, aes(x = Node, ymin = lower, ymax = upper), 
+                width = 0.2, color = "black", inherit.aes = FALSE) +
+  scale_fill_manual(values = setNames(violin_colors, unique(long_boot_data$Node))) +
+  facet_wrap(~ country, scales = "free_y", ncol = 2, nrow = 4) +  
+  labs(
+    title = "",
+    x = "Node",
+    y = "Centrality"
+  ) +
+  theme(
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.title.x = element_text(size = 14, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none")
+
+# Save
+ggsave(here("Output", "H1.jpg"), width = 10, height = 16, dpi = 300)
+
+```
+
+
+## H2: CB index is a latent variable for mentality
+
+```{r}
+# Objects for H2
+shortnames_H2 = c("government", "aliens", "technology", "elite", "drugs", "CB")
+
+Totalgroup_comm_H2 <- list(
+  "Conspiracy Mentality" = c(1:5),
+  "Conspiracy Beliefs" = c(6))
+
+Totalgroup_cols_H2 <- c("#008B8BB3", "#966FD6B3") 
+
+#type
+type_H2 = c("g","g","g","g","g","g")
+
+#level
+level_H2 = c(1,1,1,1,1,1)
+```
+
+### Estimation and network plotting
+
+```{r}
+# Initialize an empty list to store node-wise R² results
+node_r2_results_H2 <- list()
+
+# Network estimation and plotting loop
+for (country_name in names(H2_split_data)) {
+  
+  # Access country data
+  country_matrix <- H2_split_data[[country_name]]
+  
+  # Network estimation
+  mgm_result <- mgm(country_matrix, type = type_H2, level = level_H2,
+                    lambdaSel = "CV", ruleReg = "OR", verbose = F, pbar = F)
+  
+  # Predictability (Extract node-wise R² values)
+  pred_result <- predict(object = mgm_result, data = country_matrix, errorCon = 'R2')
+
+  # Store node-wise R² values in the list
+  node_r2_results_H2[[country_name]] <- pred_result$errors[,2]  # Extracting R² values
+  
+  # Path and name
+  output_path <- here("Output", "Country_networks", "H2", paste0(country_name))
+  
+  # Plot with R² visualization
+  qgraph(
+    mgm_result$pairwise$wadj, layout = 'spring', labels = shortnames_H2,
+    groups = Totalgroup_comm_H2, color = Totalgroup_cols_H2, legend = FALSE,
+    title = country_name, edge.color = mgm_result$pairwise$edgecolor_cb,
+    vTrans = 180, borders = TRUE, vsize = 11, esize = 11, label.cex = 0.60,
+    label.scale = F, filetype = "jpg", filename = output_path,
+    pie = pred_result$errors[,2], # Using the same R² values for visualization
+    pieColor = rep('#FFFF00', length(shortnames_H2)) # Yellow color for R² pies
+  )
+}
+
+# Save pred_result
+saveRDS(node_r2_results_H2, here("Input", "Secondary", "pred_result_5gcb_CB.rds"))
+```
+
+```{r}
+# Define input directory for H2 and output file paths
+input_directory <- here("Output", "Country_networks", "H2")
+output_file <- here("Output", "H2_Net_comp.jpg")
+output_file_long <- here("Output", "H2_Net_comp_long.jpg")
+
+# Read, scale for maximum quality, and combine all JPG files in a 4x2 layout
+network_images <- lapply(
+  list.files(input_directory, pattern = "\\.jpg$", full.names = TRUE),
+  function(file) image_scale(image_read(file), "2000x2000") # Increase image size
+)
+
+# Create a composite image in 4x2 layout
+composite_image <- image_montage(
+  image_join(network_images),
+  tile = "4x2",
+  geometry = "+20+20" # Add more spacing between images
+)
+
+# Save the 4x2 composite image
+image_write(composite_image, path = output_file, format = "jpg", density = 300, quality = 100)
+
+# Create a composite image in 2x4 layout
+composite_image_long <- image_montage(
+  image_join(network_images),
+  tile = "2x4",
+  geometry = "+20+20" # Add more spacing between images
+)
+
+# Save the 2x4 composite image
+image_write(composite_image_long, path = output_file_long, format = "jpg", density = 300, quality = 100)
+```
+
+```{r}
+# Print USA network with different layout to assemble Figure 1
+  
+  # Network estimation
+  mgm_result <- mgm(H2_split_data$USA, type = type_H2, level = level_H2,
+                    lambdaSel = "CV", ruleReg = "OR", verbose = FALSE, pbar = F)
+  
+  # Predictability
+  pred_result <- predict(object = mgm_result, data = country_matrix, errorCon = 'R2')
+  
+  # Define save path
+  output_path <- here("Output", "Country_networks", "H2", "USA_Fig1.jpg")
+
+  # Open a JPG device with custom dimensions
+  jpeg(here("Output", "Country_networks", "H2", "USA_Fig1.jpg"),
+        width = 10, height = 5.3, units = "in", res = 600)
+
+  # Generate the qgraph plot
+  qgraph(
+  mgm_result$pairwise$wadj, layout = 'spring', labels = shortnames_H2,
+  groups = Totalgroup_comm_H2, color = Totalgroup_cols_H2, legend = FALSE,
+  title = "H2: CM items and CB index", edge.color = mgm_result$pairwise$edgecolor_cb,
+  vTrans = 180, borders = TRUE, vsize = 7, esize = 6, label.cex = 0.60,
+  label.scale = F, 
+  pie = pred_result$errors[,2], 
+  pieColor = rep('#FFFF00', length(shortnames_H2))
+  )
+
+  # Close the device
+  dev.off()
+
+```
+
+### Bootstrapped network estimation
+
+```{r}
+# mgm boots by country
+ 
+# # Empty list for bootstrapped results
+# boot_result_H2 <- list()
+# 
+# # Loop for each country
+# for (country_name in names(H2_split_data)) {
+#   
+#   # Access country data
+#   country_matrix <- H2_split_data[[country_name]]
+#   
+#   # Bootstrapping
+#   boot_result <- bootnet(
+#     country_matrix,
+#     nBoots = 1000,
+#     nCores = 8,
+#     default = "mgm",
+#     statistics = "strength"
+#   )
+#   
+#   # Save results in the list
+#   boot_result_H2[[country_name]] <- boot_result
+# }
+# 
+# # Save locally
+# saveRDS(boot_result_H2, here("Input", "Secondary", "boot_H2.rds"))
+
+# To save time, load bootstrapped results
+boot_result_H2 <- readRDS(here("Input", "Secondary", "boot_H2.rds"))
+```
+
+### H2 plot
+
+```{r}
+# Data managment of bootstrap object
+
+# Nodes
+node_names <- c("government", "aliens", "technology", "elite", "drugs", "CB")
+
+# Empty list
+boot_dataframes <- list()
+
+# Loop for each country
+for (country_name in names(boot_result_H2)) {
+  
+  # Extract the vector of bootstrap values
+  values <- boot_result_H2[[country_name]][["bootTable"]][["value"]]
+  
+  # Check if the length of values is divisible by the number of nodes
+  if (length(values) %% length(node_names) != 0) {
+    stop(paste("Length of values for", country_name, "is not a multiple of", length(node_names)))
+  }
+  
+  # Reshape the values into a matrix with 6 columns (one for each node)
+  values_matrix <- matrix(values, ncol = length(node_names), byrow = TRUE)
+  
+  # Convert the matrix into a data frame
+  values_dataframe <- as.data.frame(values_matrix)
+  colnames(values_dataframe) <- node_names
+  
+  # Add the country-specific data frame to the list
+  boot_dataframes[[country_name]] <- values_dataframe
+}
+```
+
+```{r}
+# Plot for H2
+
+# Gather centrality scores in long format
+long_boot_data <- do.call(rbind, lapply(names(boot_dataframes), function(country_name) {
+  df <- boot_dataframes[[country_name]]
+  df$country <- country_name # Add a column for the country
+  return(df)
+})) %>%
+  melt(id.vars = "country", variable.name = "Node", value.name = "Centrality")
+
+# Calculate 95% bootstrapped CIs
+ci_data <- long_boot_data %>%
+  group_by(country, Node) %>%
+  summarise(
+    lower = quantile(Centrality, probs = 0.025),
+    upper = quantile(Centrality, probs = 0.975),
+    .groups = "drop"
+  )
+
+# Colors
+violin_colors <- ifelse(unique(long_boot_data$Node) == "CB", "#966FD6B3","#008B8BB3")
+
+# Plot
+H2 <- ggplot(long_boot_data, aes(x = Node, y = Centrality, fill = Node)) +
+  geom_violin(alpha = 0.8) +
+  geom_errorbar(data = ci_data, aes(x = Node, ymin = lower, ymax = upper), 
+                width = 0.2, color = "black", inherit.aes = FALSE) +
+  scale_fill_manual(values = setNames(violin_colors, unique(long_boot_data$Node))) +
+  facet_wrap(~ country, scales = "free_y", ncol = 2, nrow = 4) +  
+  labs(
+    title = "",
+    x = "Node",
+    y = "Centrality"
+  ) +
+  theme(
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.title.x = element_text(size = 14, face = "bold"),
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none")
+
+# Save
+ggsave(here("Output", "H2.jpg"), H2, width = 10, height = 16, dpi = 300)
+
+```
+
+## Figure_1
+
+```{r}
+# Define the input file paths
+file_H0 <- here("Output", "Country_networks", "H0", "USA_Fig1.jpg")
+file_H1 <- here("Output", "Country_networks", "H1", "USA_Fig1.jpg")
+file_H2 <- here("Output", "Country_networks", "H2", "USA_Fig1.jpg")
+
+# Define output file path
+output_file_long <- here("Output", "Figure_1_Long.jpg")
+
+# Read images
+network_images <- lapply(
+  c(file_H0, file_H1, file_H2),
+  function(file) image_read(file)
+)
+
+# Create a long image 
+composite_image_long <- image_append(image_join(network_images), stack = TRUE)
+
+# Save with max quality
+image_write(
+  composite_image_long, 
+  path = output_file_long, 
+  format = "jpg", 
+  quality = 600
+)
+```
+
+
+## All data
+
+```{r}
+# objects for network 
+shortnames = c("POP", "INST_TR", "VIC", "CM", "CB")
+
+# Country color palette 
+country_colors <- c(
+  "DEU" = "#E41A1C", "ESP" = "#377EB8", "FRA" = "#4DAF4A", 
+  "GBR" = "#984EA3", "ITA" = "#FF7F00", "POL" = "#ffcf33",
+  "SWE" = "#A65628", "USA" = "#008080")
+
+Totalgroup_comm <- list(
+  "Determinants" = c(1:4),
+  "Conspiracy Beliefs" = c(5))
+
+Totalgroup_cols <- c("#966FD6B3", "#008B8BB3") 
+
+#type
+type = c("g","g","g","g","g")
+
+#level
+level = c(1,1,1,1,1)
+
+```
+
+
+```{r}
+# Network estimation and plotting
+
+# Loop through each country
+for (country_name in names(all_data_split_data)) {
+  
+  # Access country data
+  country_matrix <- all_data_split_data[[country_name]]
+  
+  # Network estimation
+  mgm_result <- mgm(country_matrix, type = type, level = level,
+                    lambdaSel = "EBIC", ruleReg = "OR", verbose = FALSE, pbar = F)
+  
+  # Predictability
+  pred_result <- predict(object = mgm_result, data = country_matrix, errorCon = 'R2')
+  
+  # Path and name
+  output_path <- here("Output", "Country_networks", "all_data", paste0(country_name))
+  
+  # Plot with R^2 visualization
+  qgraph(
+    mgm_result$pairwise$wadj, layout = 'spring', labels = shortnames,
+    groups = Totalgroup_comm, color = Totalgroup_cols, legend = FALSE,
+    title = country_name, edge.color = mgm_result$pairwise$edgecolor_cb,
+    vTrans = 180, borders = TRUE, vsize = 11, esize = 11, label.cex = 0.60,
+    label.scale = F, filetype = "jpg", filename = output_path,
+    pie = pred_result$errors[,2], # R^2 values for pies
+    pieColor = rep('#FFFF00', length(shortnames)) # Yellow color for R^2 pies
+  )
+}
+```
+
+

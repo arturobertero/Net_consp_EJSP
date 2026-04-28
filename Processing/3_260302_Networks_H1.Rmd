@@ -1,0 +1,337 @@
+---
+title: "H1"
+author: "Arturo Bertero"
+date: "2026-03-02"
+output: html_document
+---
+
+# Input
+
+```{r}
+#Libraries
+library(pacman)
+p_load(lavaan, rio, tidyverse, psych, here, stargazer, summarytools, visdat,
+       EGAnet, qgraph, ggplot2, haven, janitor, readxl, labelled, reshape2,
+       openxlsx, mgm, bootnet, conflicted, magick, cocron, lme4, broom.mixed,
+       patchwork, huge)
+
+#Options
+rm(list = ls())
+options(scipen = 999)
+#conflicts
+conflicts_prefer(dplyr::filter)
+conflicts_prefer(dplyr::select)
+
+# Data
+master_datasets <- readRDS(here("Input", "Secondary", "master_datasets.rds"))
+```
+
+# Processing
+
+## Preparation
+
+```{r}
+# Initialize an empty list 
+H1_matrices <- list()
+
+# Loop through the master list to extract and split data 
+for (study_name in names(master_datasets)) {
+  
+  df <- master_datasets[[study_name]]
+  
+  # For H1 we keep only country, CM, and cbs
+  df_clean <- df %>%
+    select(country, CM, starts_with("cb_")) %>%
+    na.omit()
+  
+  # Split by country
+  split_df <- split(df_clean[, setdiff(names(df_clean), "country")], df_clean$country)
+  
+  # Convert to matrices, apply nonparanormal transformation, and assign names
+  for (country_name in names(split_df)) {
+    list_name <- paste0(study_name, "_", country_name)
+    
+    # 1. Convert to raw matrix
+    raw_matrix <- as.matrix(split_df[[country_name]])
+    
+    # 2. Apply the nonparanormal transformation and store directly in H1_matrices
+    H1_matrices[[list_name]] <- huge.npn(raw_matrix, verbose = FALSE)
+  }
+}
+```
+
+
+## Network estimation and plotting
+
+```{r}
+# usual colors
+Totalgroup_cols_H1 <- c("#966FD6", "#006B3C") 
+
+for (name in names(H1_matrices)) {
+  
+  data_matrix <- H1_matrices[[name]]
+  n_vars <- ncol(data_matrix)
+  node_names <- colnames(data_matrix)
+  
+  # generate type and level 
+  type_vec <- rep("g", n_vars)
+  level_vec <- rep(1, n_vars)
+  
+  # estimation
+  mgm_result <- mgm(
+    data_matrix, type = type_vec, level = level_vec,
+    lambdaSel = "CV", ruleReg = "OR", verbose = FALSE, pbar = FALSE
+  )
+  
+  # Predictability
+  pred_result <- predict(object = mgm_result, data = data_matrix, errorCon = 'R2')
+  
+  # assign to groups 
+  groups_H1 <- list(
+    "CB items" = which(grepl("^cb_", node_names)),
+    "CM Index" = which(node_names == "CM")
+  )
+  
+  # output path 
+  output_path <- here("Output", "H1", "Country_networks", paste0(name, ".png"))
+
+  # Open device
+  png(output_path, width = 4.15, height = 5.85, units = "in", res = 600)
+
+  # plot 
+  qgraph(
+    mgm_result$pairwise$wadj, layout = "spring", labels = node_names,
+    groups = groups_H1,  
+    color = Totalgroup_cols_H1, legend = FALSE,
+    title = name, edge.color = mgm_result$pairwise$edgecolor_cb,
+    vTrans = 180, borders = TRUE, vsize = 10, esize = 7, label.cex = 0.50,
+    label.scale = FALSE, 
+    pie = pred_result$errors[,2], 
+    pieColor = rep('#FFFF00', n_vars)
+  )
+
+  dev.off()
+}
+```
+
+```{r}
+# Figures for the supplement
+
+# Directories 
+input_dir <- here("Output", "H1", "Country_networks")
+output_dir <- here("Output", "H1", "Composite_Figures")
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Fetch all PNGs 
+all_pngs <- list.files(input_dir, pattern = "\\.png$", full.names = TRUE)
+
+# STUDY 1: 8 Countries 
+study1_files <- all_pngs[grepl("Study1", all_pngs)]
+if (length(study1_files) == 8) {
+  
+  imgs_1a <- lapply(study1_files[1:4], image_read)
+  imgs_1b <- lapply(study1_files[5:8], image_read)
+  
+  comp_1a <- image_montage(image_join(imgs_1a), tile = "2x2", geometry = "+50+50")
+  comp_1b <- image_montage(image_join(imgs_1b), tile = "2x2", geometry = "+50+50")
+  
+  # Save 
+  image_write(comp_1a, path = here(output_dir, "H1_Study1_Composite_A.png"), format = "png")
+  image_write(comp_1b, path = here(output_dir, "H1_Study1_Composite_B.png"), format = "png")
+}
+
+#  STUDY 2
+study2_files <- all_pngs[grepl("Study2", all_pngs)]
+if (length(study2_files) == 1) {
+  file.copy(from = study2_files[1], to = here(output_dir, "H1_Study2_Composite.png"), overwrite = TRUE)
+}
+
+#STUDY 3 CMQ: 
+study3_cmq_files <- all_pngs[grepl("Study3_CMQ", all_pngs)]
+if (length(study3_cmq_files) == 8) {
+  
+  imgs_3a_cmq <- lapply(study3_cmq_files[1:4], image_read)
+  imgs_3b_cmq <- lapply(study3_cmq_files[5:8], image_read)
+  
+  comp_3a_cmq <- image_montage(image_join(imgs_3a_cmq), tile = "2x2", geometry = "+50+50")
+  comp_3b_cmq <- image_montage(image_join(imgs_3b_cmq), tile = "2x2", geometry = "+50+50")
+  
+  # Save 
+  image_write(comp_3a_cmq, path = here(output_dir, "H1_Study3_CMQ_Composite_A.png"), format = "png")
+  image_write(comp_3b_cmq, path = here(output_dir, "H1_Study3_CMQ_Composite_B.png"), format = "png")
+}
+
+```
+
+
+## Bootstrapping
+
+```{r}
+# mgm boots by country
+
+# # Set seed for exact reproducibility
+# set.seed(123)
+# 
+# # empty list
+# boot_results_H1 <- list()
+# 
+# # Loop across all matrices dynamically
+# for (name in names(H1_matrices)) {
+#   cat("Bootstrapping", name, "...\n")
+#   
+#   country_matrix <- H1_matrices[[name]]
+#   
+#   # bootnet 
+#   boot_result <- bootnet(
+#     country_matrix,
+#     nBoots = 1000,
+#     nCores = 16, 
+#     default = "mgm",
+#     statistics = "strength"
+#   )
+#     
+#   boot_results_H1[[name]] <- boot_result
+# }
+# 
+# # Save locally
+# saveRDS(boot_results_H1, here("Input", "Secondary", "boot_H1_master.rds"))
+
+# Load to save time
+boot_results_H1 <- readRDS(here("Input", "Secondary", "boot_H1_master.rds"))
+```
+
+## Violins
+
+```{r}
+# Empty list 
+boot_dataframes <- list()
+
+# reshape based on the specific node count of each dataset
+for (name in names(boot_results_H1)) {
+  
+  values <- boot_results_H1[[name]][["bootTable"]][["value"]]
+  
+  # Fetch node names and counts 
+  node_names <- colnames(H1_matrices[[name]])
+  n_nodes <- length(node_names)
+  
+  # Reshape vector into a matrix
+  values_matrix <- matrix(values, ncol = n_nodes, byrow = TRUE)
+  
+  # Convert to df
+  values_dataframe <- as.data.frame(values_matrix)
+  colnames(values_dataframe) <- node_names
+  
+  boot_dataframes[[name]] <- values_dataframe
+}
+
+# Melt dfs individually first, then bind 
+long_boot_list <- lapply(names(boot_dataframes), function(name) {
+  df <- boot_dataframes[[name]]
+  df$Dataset <- name 
+  melt(df, id.vars = "Dataset", variable.name = "Node", value.name = "Centrality")
+})
+
+# Combine all the long-format dfs
+long_boot_data <- do.call(rbind, long_boot_list)
+
+# Clean data
+long_boot_data <- long_boot_data %>%
+  mutate(
+    # raw country string
+    CountryRaw = Dataset %>%
+      str_remove("Study1_SUSPECTS_") %>%
+      str_remove("Study2_ACTS_") %>%
+      str_remove("Study3_CMQ_"),
+    
+    # from ISO to full names
+    CountryName = case_when(
+      CountryRaw == "DEU" ~ "Germany",
+      CountryRaw == "ESP" ~ "Spain",
+      CountryRaw == "FRA" ~ "France",
+      CountryRaw == "GBR" ~ "United Kingdom",
+      CountryRaw == "ITA" ~ "Italy",
+      CountryRaw == "POL" ~ "Poland",
+      CountryRaw == "SWE" ~ "Sweden",
+      CountryRaw %in% c("USA", "USA_ACTS") ~ "United States",
+      TRUE ~ CountryRaw # Leaves Study 3 names (e.g., "Brazil", "Morocco") as is
+    ),
+    
+    # Assign acronym of the CM scales
+    ScaleAcronym = case_when(
+      grepl("Study1", Dataset) ~ "GCB5",
+      grepl("Study2", Dataset) ~ "ACTS",
+      grepl("Study3_CMQ", Dataset) ~ "CMQ"
+    ),
+    
+    # Combine into the final facet title
+    FacetTitle = paste0(CountryName, " - ", ScaleAcronym)
+  )
+
+# Calculate 95% bootstrapped CIs 
+ci_data <- long_boot_data %>%
+  group_by(FacetTitle, Node) %>%
+  summarise(
+    lower = quantile(Centrality, probs = 0.025),
+    upper = quantile(Centrality, probs = 0.975),
+    .groups = "drop"
+  )
+
+# Colors
+violin_colors <- ifelse(unique(long_boot_data$Node) == "CM", "#006B3C", "#966FD6")
+names(violin_colors) <- unique(long_boot_data$Node)
+
+# Define the 4 plot groups and y-axis limits
+plot_groups <- list(
+  "Study1"     = list(prefix = "Study1_",      y_lim = c(0.4, 1.2)),
+  "Study2"     = list(prefix = "Study2_",      y_lim = NULL),        # Default limits for Study 2
+  "Study3_CMQ" = list(prefix = "Study3_CMQ_",  y_lim = c(0, 1.3))
+)
+
+# Generate and save a plots
+for (group_name in names(plot_groups)) {
+  
+  # Extract group settings
+  prefix <- plot_groups[[group_name]]$prefix
+  y_lim <- plot_groups[[group_name]]$y_lim
+  
+  # Filter data 
+  group_long_data <- long_boot_data %>% filter(grepl(paste0("^", prefix), Dataset))
+  group_ci_data <- ci_data %>% filter(FacetTitle %in% unique(group_long_data$FacetTitle))
+  
+  #the plot
+  group_plot <- ggplot(group_long_data, aes(x = Node, y = Centrality, fill = Node)) +
+    geom_violin(alpha = 0.8) +
+    geom_errorbar(data = group_ci_data, aes(x = Node, ymin = lower, ymax = upper), 
+                  width = 0.2, color = "black", inherit.aes = FALSE) +
+    scale_fill_manual(values = violin_colors) +
+    facet_wrap(~ FacetTitle, scales = "free_x", ncol = 2) +  
+    labs(
+      title = paste("H1 Bootstrapped Centrality:", group_name),
+      x = "Node",
+      y = "Centrality"
+    ) +
+    theme(
+      legend.position = "none",
+      axis.title.y = element_text(size = 14, face = "bold"),
+      axis.title.x = element_text(size = 14, face = "bold"),
+      plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    )
+  
+  # Apply fixed Y-axis limits 
+  if (!is.null(y_lim)) {
+    group_plot <- group_plot + scale_y_continuous(limits = y_lim)
+  }
+  
+  # adjust height based on the number of panels
+  n_panels <- length(unique(group_long_data$FacetTitle))
+  plot_height <- max(6, ceiling(n_panels / 2) * 3) 
+  
+  # Save 
+output_filename <- here("Output", "H1", paste0("H1_Centrality_", group_name, ".png"))
+  ggsave(output_filename, plot = group_plot, device = "png", 
+         width = 10, height = plot_height, units = "in", dpi = 600)
+}
+```
+
