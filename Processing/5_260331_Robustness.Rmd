@@ -73,9 +73,8 @@ set.seed(123)
 B <- 1000
 monte_carlo_results <- list()
 
-# ==========================================
 # 2. Parallelized Loop
-# ==========================================
+
 for (name in names(Full_items_npn)) {
     
     data_matrix_npn <- Full_items_npn[[name]] 
@@ -122,10 +121,8 @@ for (name in names(Full_items_npn)) {
     monte_carlo_results[[name]] <- dataset_results
 }
 
-# ==========================================
 # 3. Cleanup & Save
-# ==========================================
-stopCluster(cl) # Very important: shut down the workers!
+stopCluster(cl) # shut down the workers!
 
 saveRDS(monte_carlo_results, here("Input", "Secondary", "monte_carlo_results.rds"))
 
@@ -259,7 +256,7 @@ ggplot(mc_data_ordered, aes(x = "Simulations", y = Delta_Mean)) +
     y = expression(paste(Delta, " Mean (Strength Centrality)"))
   ) +
   
-  # Apply your custom masterpiece theme
+  # Apply custom theme
   theme_masterpiece() +
   theme(
     # Clean up the X-axis since "Simulations" is redundant across facets
@@ -542,7 +539,7 @@ for (study_id in unique(cent_plot_data$Study)) {
     
     facet_wrap(~ CountryName, ncol = ncol_val, scales = "fixed") + 
     
-    # UPDATE 2: Clean, short labels
+    # labels
     scale_color_manual(values = hyp_colors, labels = c("H0", "H1", "H2")) +
     
     labs(
@@ -553,7 +550,7 @@ for (study_id in unique(cent_plot_data$Study)) {
     
     theme_masterpiece() +
     theme(
-      # UPDATE 1: Legend relocated to the bottom
+      # Legend relocated to the bottom
       legend.position = "bottom",
       legend.title = element_text(face = "bold", size = 11),
       legend.text = element_text(size = 10),
