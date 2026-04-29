@@ -1,6 +1,6 @@
 ---
 title: "Data_managment"
-author: "Arturo Bertero"
+author: ""
 date: "2024-10-17"
 output: html_document
 ---

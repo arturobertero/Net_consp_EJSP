@@ -1,6 +1,6 @@
 ---
 title: "5_260302_Robustness"
-author: "Arturo Bertero"
+author: ""
 date: "2026-03-02"
 output: html_document
 ---

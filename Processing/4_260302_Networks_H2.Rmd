@@ -1,6 +1,6 @@
 ---
-title: "H1"
-author: "Arturo Bertero"
+title: "H2"
+author: ""
 date: "2026-03-02"
 output: html_document
 ---
